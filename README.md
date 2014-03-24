@@ -50,6 +50,8 @@ We use RHEL6/CentOS as examples.
 
 ##### Setting vnc server
 
+    # run firefox, then kill it
+    firefox
     . bash-functions-for-firefox/functions.sh
     setting_vnc_password 123456
     

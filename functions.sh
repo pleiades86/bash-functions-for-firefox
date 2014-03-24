@@ -194,7 +194,7 @@ function setting_vnc_password {
         dir=$(get_home_dir)
         # passwd=$(pwgen -c -n -s 32 1)
         [ -d ${dir}/.vnc ] || mkdir ${dir}/.vnc
-        [ -e ${dir}/.vnc/passwd ] || touch  ${dir}/.vnc/passwd
+        [ -e ${dir}/.vnc/passwd ] || touch  ${dir}/.vnc/passwd && chmod 600 ${dir}/.vnc/passwd
         echo ${passwd:-redhat} | vncpasswd -f > ${dir}/.vnc/passwd
     )
 }

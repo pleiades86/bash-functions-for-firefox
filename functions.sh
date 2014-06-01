@@ -1,4 +1,5 @@
-#!/bin/bash
+# Requirements
+# perl perl-Config-IniFiles redhat-lsb-core
 function wait_a_while {
     sleep 3
 }
@@ -23,7 +24,7 @@ function get_path_to_mozilla_xremote_client {
                 [ -x ${prog} ] && { echo ${prog};return 0; }
             fi
         done
-        os=$(lsb_release --id | cut -d ':' -f 2)
+        os=$(lsb_release --id | cut -s -d':' -f 2 | sed 's/^\s*//g' | sed 's/\s*$//g')
         echo "Now do not support ${os}."
         echo "If you know the path of mozilla-xremote-client, pls send email to the maintainer."
         echo "Perhaps you can submit a patch."
@@ -47,7 +48,6 @@ function get_firefox_db_dir {
         return ${ret}
     )
 }
-
 
 function is_firefox_open {
     (
@@ -148,7 +148,7 @@ function get_nickname_from_cert {
         echo 'Function get_nickname_from_cert need an argument'
         echo 'Usage: get_nickname_from_cert path_to_certification'
     fi
-    openssl x509 -in ${cert} -noout -subject | cut -d '/' -f 7 | cut -d '=' -f 2
+    openssl x509 -in ${cert} -noout -subject | cut -s -d'/' -f 7 | cut -s -d'=' -f 2
 }
 
 function is_cert_in_db {

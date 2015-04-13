@@ -63,6 +63,54 @@ function close_firefox_win {
     )
 }
 
+function set_firefox_user_pref {
+    (
+        key=${1:-};
+        value=${2:-}
+        if [ "${key}"x = x ];then
+            echo "Need at least one argument"
+            exit $(false || echo $?)
+        fi
+        [ "${value}"x = x ] && value='false'
+
+        tempfile=$(mktemp)
+        dir=$(get_firefox_db_dir)
+        file=${dir}/prefs.js
+        grep -v "user_pref(\"${key}\"," ${file} > ${tempfile}
+        cat ${tempfile} > ${file}
+        echo "user_pref(\"${key}\", $value);" >> ${file}
+        rm -f ${tempfile}
+        wait_a_while
+    )
+}
+
+function set_firefox_user_pref_in_mass {
+    (
+        value=${1:-};
+        if [ "${value}"x = x ];then
+            echo "Need at least one argument"
+            exit $(false || echo $?)
+        fi
+        shift
+        tempfile=$(mktemp)
+        tempfile2=$(mktemp)
+        dir=$(get_firefox_db_dir)
+        file=${dir}/prefs.js
+        cat ${file} > ${tempfile}
+        for key in $@;do
+            grep -v "user_pref(\"${key}\"," ${tempfile} > ${tempfile2}
+            mv -f ${tempfile2} ${tempfile}
+        done
+        cat ${tempfile} > ${file}
+        for key in $@;do
+            echo "user_pref(\"${key}\", $value);" >> ${file}
+        done
+        rm -f ${tempfile} ${tempfile2}
+        wait_a_while
+    )
+}
+
+
 function set_firefox_no_session_restore {
     (
         tempfile=$(mktemp)

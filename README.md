@@ -62,11 +62,12 @@ We use RHEL6/CentOS as examples.
     # if need, setting kerberos authentication
     set_firefox_support_krb5_auth
     # For self-signed certification site, we need manully import certification file
-    cf=$(get_ssl_cert_from_remote server_dns_name server_port)
-    nickname=$(get_nickname_from_cert)
+    cf=$(mktemp)
+    get_ssl_cert_from_remote server_dns_name server_port > $cf
+    nickname=$(get_nickname_from_cert $cf)
     # Add the cert if it not in the db
-    is_cert_in_db ${nickname} || add_cert_to_db ${nickname} ${tf}
-    rm -f $tf
+    is_cert_in_db ${nickname} || add_cert_to_db ${nickname} ${cf}
+    rm -f $cf
     
 #### Script to start vncserver when machine boot and start firefox
 

@@ -140,3 +140,28 @@ Remove certification file from db
 
     setting_vnc_password [passwd]
 
+
+## Configuring Firefox
+
+Usually to run Firefox from command-lines, we need setup the following
+configuations as need
+
+For what the follow settings do, pls reference
+[About:config entries](http://kb.mozillazine.org/About:config_entries)
+
+### 1. Boolean settings
+
+    security.csp.enable
+    dom.disable_open_during_load
+    browser.sessionstore.restore_on_demand
+    browser.tabs.warnOnClose
+    browser.tabs.warnOnOpen
+    browser.sessionstore.enabled
+    signon.rememberSignons
+    browser.tabs.loadDivertedInBackground
+
+### 2. Number/String settings
+
+    network.negotiate-auth.trusted-uris
+    network.negotiate-auth
+    browser.link.open_newwindow

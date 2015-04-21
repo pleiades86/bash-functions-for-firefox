@@ -258,7 +258,7 @@ function remove_cert_from_db {
 
 # Functions to read/write localStorage/sessionStorage.
 # https://developer.mozilla.org/en-US/docs/Web/Guide/API/DOM/Storage
-# {scope, key} must be unique in the localStorage/sessoinStorage
+# {scope, key} must be unique in the localStorage/sessionStorage
 function quote_str_for_sqlite3 {
     (
         str="$1"

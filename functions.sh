@@ -150,7 +150,7 @@ function set_firefox_no_password_remember {
 function open_firefox_win {
     (
         uri=$1
-        d=$(mktemp)
+        d=$(mktemp -d)
         o=$(pwd)
         cd $d
         is_firefox_open && close_firefox_win
@@ -163,7 +163,7 @@ function open_firefox_win {
             fi
         done
         rm -rf $d
-        cd ${0}
+        cd ${o}
     )
 }
 
@@ -181,7 +181,11 @@ function is_firefox_open {
         if [ "${dir}"x = x ];then
             return $(false || echo $?)
         else
-            fuser -s ${dir}/.parentlock
+            if [ -e ${dir}/.parentlock ];then
+                fuser -s ${dir}/.parentlock
+            else
+                return $(false || echo $?)
+            fi
         fi
     )
 }

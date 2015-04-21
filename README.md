@@ -36,8 +36,12 @@ If need, pls run command as follows
 
 ##### Install firefox and tools to control it
 
-    yum -y install firefox nss-tools perl-Config-IniFiles
-    
+    yum -y install firefox nss-tools
+
+##### Install Perl modules and jq
+
+    yum -y install perl-Config-IniFiles perl-DBI perl-DBD-SQLite jq
+
 ##### Create a common user
 
     useradd pkger

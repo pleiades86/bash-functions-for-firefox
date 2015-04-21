@@ -5,7 +5,7 @@
 
 # Functions to get xul/Firefox pathes
 function wait_a_while {
-    sleep 3
+    sleep 1
 }
 
 function get_current_user_name {

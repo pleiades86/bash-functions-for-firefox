@@ -200,9 +200,19 @@ For what the follow settings do, pls reference
     browser.sessionstore.enabled
     signon.rememberSignons
     browser.tabs.loadDivertedInBackground
-
+    browser.cache.memory.enable
+    dom.allow_scripts_to_close_windows
+    dom.disable_window_move_resize
+    dom.disable_window_status_change
+    update_notifications.enabled
+    
 ### 2. Number/String settings
 
     network.negotiate-auth.trusted-uris
     network.negotiate-auth
     browser.link.open_newwindow
+    browser.startup.homepage
+    browser.startup.page
+    dom.max_script_run_time
+    dom.popup_maximum
+    toolkit.storage.synchronous

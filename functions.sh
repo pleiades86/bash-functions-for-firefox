@@ -60,7 +60,7 @@ function set_firefox_user_pref {
         key=${1:-};
         value=${2:-}
         if [ "${key}"x = x ];then
-            echo "Need at least one argument" 1>&2
+            echo "Need at least one argument" >&2
             exit $(false || echo $?)
         fi
         [ "${value}"x = x ] && value='false'
@@ -204,9 +204,9 @@ function get_ssl_cert_from_remote {
         host=$1
         port=$2
         if [ -z "${host}" ];then
-            echo 'Function get_ssl_cert_from_remote need at least one argument'
-            echo 'Usage: get_ssl_cert_from_remote host [port]'
-            exit 1
+            echo 'Function get_ssl_cert_from_remote need at least one argument' >&2
+            echo 'Usage: get_ssl_cert_from_remote host [port]' >&2
+            exit $(false || echo $?)
         fi
         tempfile=$(mktemp)
         openssl s_client -connect ${host}:${port:-443} </dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' >  ${tempfile} && cat ${tempfile}
@@ -237,9 +237,9 @@ function add_cert_to_db {
         certification=$2
         trust_type=$3
         if [ -z "${nickname}" -o -z "${certification}" ];then
-            echo 'Function add_cert_to_db need at least 2 arguments'
-            echo 'Usage: add_cert_to_db nickname certification [trust_type]'
-            exit 1
+            echo 'Function add_cert_to_db need at least 2 arguments' >&2
+            echo 'Usage: add_cert_to_db nickname certification [trust_type]' >&2
+            exit $(false || echo $?)
         fi
         dir=$(get_firefox_db_dir)
         certutil -A -t ${trust_type:-P} -n "${nickname}" -d ${dir} -i "${certification}"
@@ -251,8 +251,8 @@ function remove_cert_from_db {
     (
         nickname=$1
         if [ -z "${nickname}" ];then
-            echo 'Function remove_cert_from_db need 1 arguments'
-            exit 1
+            echo 'Function remove_cert_from_db need 1 arguments' >&2
+            exit $(false || echo $?)
         fi
         dir=$(get_firefox_db_dir)
         certutil -D -n "${nickname}" -d ${dir}
@@ -409,15 +409,15 @@ function write_to_localstorage {
             if eval "jq -M -c '.' \"${file}\" >/dev/null 2>&1";then
                 value=$(jq -M -c '.' "${file}")
             else
-                echo "jq cannnot parse the file $file" 1>&2
+                echo "jq cannnot parse the file $file" >&2
                 exit $(false || echo $?)
             fi
         fi
         if eval "jq -n -M -c '@sh | ${value}' > /dev/null 2>&1";then
             value=$(jq -n -M -c "@sh | ${value}")
         else
-            echo "write_to_localstorage: cannot covert the value to JSON" 1>&2
-            echo $value 1>&2
+            echo "write_to_localstorage: cannot covert the value to JSON" >&2
+            echo $value >&2
             exit $(false || echo $?)
         fi
         scope=$(quote_str_for_sqlite3 "${scope}")

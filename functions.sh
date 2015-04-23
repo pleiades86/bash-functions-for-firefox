@@ -1,13 +1,40 @@
 # Requirements (package names on CentOS)
+#
 # perl perl-Config-IniFiles jq sqlite3 perl(DBI) perl(DBD::SQLite)
+# util-linux-ng gnutls-utils pwgen
+#
 # sqlite3 need more latest version or we cannot access the sqlites
 # owned by Firefox.
 
-# Functions to get xul/Firefox pathes
+# Miscellaneous functions.
 function wait_a_while {
     sleep 1
 }
 
+function is_X_ok {
+    [ "${DISPLAY}"x = x ] && false || true
+}
+
+# Functions to control /dev/tty.
+# If need we will give more functions.
+function is_tty {
+    tty -s
+}
+
+function disable_show_input_for_tty {
+    if [ "${EMACS}" != "t" ];then
+        is_tty && stty -echo
+    fi
+}
+
+function enable_show_input_for_tty {
+    if [ "${EMACS}" != "t" ];then
+        is_tty && stty echo
+    fi
+}
+
+
+# Functions to get xul/Firefox pathes
 function get_current_user_name {
     id -u -n
 }
@@ -22,16 +49,18 @@ function get_home_dir {
 function get_firefox_db_dir {
     (
         section="$1"
-        ret=0
+        ret=$(true && echo $?)
         home=$(get_home_dir)
         if [ -e ${home}/.mozilla/firefox/profiles.ini ];then
-            dir=$(perl -E "\
-                    use Config::IniFiles;\
-                    say Config::IniFiles->new(-file => q{${home}/.mozilla/firefox/profiles.ini})->val(q{${section:-Profile0}}, q{Path});")
+            dir=$(perl -E "
+              use Config::IniFiles;
+              say Config::IniFiles
+              ->new(-file => q{${home}/.mozilla/firefox/profiles.ini})
+              ->val(q{${section:-Profile0}}, q{Path});")
             dir=${home}/.mozilla/firefox/${dir}
         else
             dir=''
-            ret=1
+            ret=$(false || echo $?)
         fi
         echo $dir
         return ${ret}
@@ -43,7 +72,6 @@ function make_sure_firefox_db_dir {
         dir=$(get_firefox_db_dir)
         if [ "${dir}"x = x ];then
             open_firefox_win
-            wait_a_while
             close_firefox_win
             get_firefox_db_dir
         else
@@ -84,21 +112,24 @@ function set_firefox_user_pref_in_mass {
             exit $(false || echo $?)
         fi
         shift
-        tempfile=$(mktemp)
-        tempfile2=$(mktemp)
-        dir=$(get_firefox_db_dir)
-        file=${dir}/prefs.js
-        cat ${file} > ${tempfile}
-        for key in $@;do
-            grep -v "user_pref(\"${key}\"," ${tempfile} > ${tempfile2}
-            mv -f ${tempfile2} ${tempfile}
-        done
-        cat ${tempfile} > ${file}
-        for key in $@;do
-            echo "user_pref(\"${key}\", $value);" >> ${file}
-        done
-        rm -f ${tempfile} ${tempfile2}
-        wait_a_while
+        cmds=$(mktemp)
+        file=$(make_sure_firefox_db_dir)/prefs.js
+        {
+            for key in $@;do
+                echo "g/user_pref(\"${key}\",/d"
+            done
+        } > ${cmds}
+        echo -n -e '$a\n' >> ${cmds}
+        {
+            for key in $@;do
+                echo "user_pref(\"${key}\", $value);"
+            done
+        } >> ${cmds}
+        echo -n -e '.\nw\nq\n' >> ${cmds}
+
+        ed -s ${file} < ${cmds}
+        
+        rm -f ${cmds}
     )
 }
 
@@ -108,13 +139,13 @@ function set_firefox_no_session_restore {
         tempfile=$(mktemp)
         dir=$(get_firefox_db_dir)
         file=${dir}/prefs.js
-        grep -v "user_pref(\"browser.sessionstore.enabled\"," ${file} | grep -v "user_pref(\"browser.sessionstore.resume_from_crash\"," > ${tempfile}
+        grep -v "user_pref(\"browser.sessionstore.enabled\"," ${file} \
+            | grep -v "user_pref(\"browser.sessionstore.resume_from_crash\"," > ${tempfile}
         cat ${tempfile} > ${file}
         for str in enabled resume_from_crash;do
             echo "user_pref(\"browser.sessionstore.${str}\", false);" >> ${file}
         done
         rm -f ${tempfile}
-        wait_a_while
     )
 }
 
@@ -124,13 +155,13 @@ function set_firefox_support_krb5_auth {
         tempfile=$(mktemp)
         dir=$(get_firefox_db_dir)
         file=${dir}/prefs.js
-        grep -v "user_pref(\"network.negotiate-auth.trusted-uris\"," ${file} | grep -v "user_pref(\"network.negotiate-auth.delegation-uris\"," > ${tempfile}
+        grep -v "user_pref(\"network.negotiate-auth.trusted-uris\"," ${file} \
+            | grep -v "user_pref(\"network.negotiate-auth.delegation-uris\"," > ${tempfile}
         cat ${tempfile} > ${file}
         for str in trusted-uris delegation-uris;do
             echo "user_pref(\"network.negotiate-auth.${str}\", \"${site:-https://}\");" >> ${file}
         done
         rm -f ${tempfile}
-        wait_a_while
     )
 }
 
@@ -143,33 +174,74 @@ function set_firefox_no_password_remember {
         cat ${tempfile} > ${file}
         echo "user_pref(\"signon.rememberSignons\", false);" >> ${file}
         rm -f ${tempfile}
-        wait_a_while
+    )
+}
+
+function set_firefox {
+    (
+        if [ "$(get_firefox_db_dir)"x = x ];then
+            open_firefox_win
+            if ! is_firefox_open;then
+                echo "Cannot find firefox home dir"
+                exit $(false || echo $?)
+            fi
+            close_firefox_win
+        fi
+        firefox_prefs_boolean_false='
+            security.csp.enable
+            dom.disable_open_during_load
+            browser.sessionstore.restore_on_demand
+            browser.tabs.warnOnClose
+            browser.tabs.warnOnOpen
+            browser.sessionstore.enabled
+            browser.sessionstore.resume_from_crash
+            signon.rememberSignons
+            dom.disable_window_move_resize
+            dom.disable_window_status_change
+            update_notifications.enabled'
+        
+        firefox_prefs_boolean_true='
+            browser.tabs.loadDivertedInBackground
+            browser.cache.memory.enable
+            dom.allow_scripts_to_close_windows'
+        
+        set_firefox_user_pref_in_mass 'false' ${firefox_prefs_boolean_false}
+        set_firefox_user_pref_in_mass 'true' ${firefox_prefs_boolean_true}
+        set_firefox_user_pref 'toolkit.storage.synchronous' 1
+        set_firefox_user_pref 'browser.link.open_newwindow' 3
+        set_firefox_user_pref 'dom.max_script_run_time' 60
+        set_firefox_user_pref 'dom.popup_maximum' 60
+        set_firefox_user_pref 'browser.startup.page' 1
     )
 }
 
 function open_firefox_win {
     (
         uri=$1
-        d=$(mktemp -d)
-        o=$(pwd)
-        cd $d
+
         is_firefox_open && close_firefox_win
-        { nohup firefox --new-instance ${uri:-} & } 2>&1 > /dev/null
-        for ((i = 0; i < 60; i++));do
+        
+        setsid firefox --new-instance ${uri:-} &
+
+        for ((i = 0; i < 300; i++));do
             if is_firefox_open;then
                 break
             else
                 wait_a_while
             fi
         done
-        rm -rf $d
-        cd ${o}
     )
 }
 
 function open_firefox_tab {
     (
         uri=$1
+
+        if ! is_X_ok;then
+            echo 'Firefox need an X server' >&2
+            exit $(false || echo $?)
+        fi    
+        
         { firefox --new-tab "${uri:-http://redhat.com}"; } 2>&1 > /dev/null
         wait_a_while
     )
@@ -177,6 +249,9 @@ function open_firefox_tab {
 
 function is_firefox_open {
     (
+        if ! is_X_ok;then
+            exit $(false || echo $?)
+        fi
         dir=$(get_firefox_db_dir)
         if [ "${dir}"x = x ];then
             return $(false || echo $?)
@@ -193,8 +268,31 @@ function is_firefox_open {
 function close_firefox_win {
     (
         dir=$(get_firefox_db_dir)
-        { fuser -s -k ${dir}/.parentlock && wait_a_while; } 2>&1 > /dev/null
-        rm -f ${dir}/.parentlock
+        lock="${dir}/.parentlock"
+
+        setsid fuser -s -k ${lock} 2>&1 > /dev/null
+        wait_a_while
+        
+        if [ -e "${lock}" ];then
+            for ((i=0;i<10;i++));do
+                if [ -e "${lock}" ];then
+                    setsid fuser -s -k ${lock} 2>&1 > /dev/null
+                    wait_a_while
+                    is_firefox_open || break
+                else
+                    break
+                fi
+            done
+        fi
+        
+        if [ -e "${lock}" ];then
+            if fuser -s "${lock}";then
+                echo 'Failed to close Firefox' >&2
+                exit $(false || echo $?)
+            else
+                rm -f ${lock}
+            fi
+        fi
     )
 }
 
@@ -208,9 +306,8 @@ function get_ssl_cert_from_remote {
             echo 'Usage: get_ssl_cert_from_remote host [port]' >&2
             exit $(false || echo $?)
         fi
-        tempfile=$(mktemp)
-        openssl s_client -connect ${host}:${port:-443} </dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' >  ${tempfile} && cat ${tempfile}
-        rm -f ${tempfile}
+        gnutls-cli -p ${port:-443} --insecure --print-cert ${host} < /dev/null \
+            | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p'
     )
 }
 
@@ -260,6 +357,33 @@ function remove_cert_from_db {
     )
 }
 
+function add_cert_for_each_host_of {
+    cf=$(mktemp)
+    for p in $@;do
+        host=$(echo ${p} | cut -d : -f 1)
+        port=$(echo ${p} | cut -s -d : -f 2)
+        get_ssl_cert_from_remote ${host} ${port:-443} > $cf
+                                                                       
+        is_cert_in_db ${nickname:-${host}} \
+            || add_cert_to_db ${nickname:-${host}} ${cf}
+    done
+    rm -f $cf
+}
+
+function update_cert_for_each_host_of {
+    cf=$(mktemp)
+    for p in $@;do
+        host=$(echo ${p} | cut -d : -f 1)
+        port=$(echo ${p} | cut -s -d : -f 2)
+        get_ssl_cert_from_remote ${host} ${port:-443} > $cf
+                                                                       
+        is_cert_in_db ${nickname:-${host}} \
+            && remove_cert_from_db ${nickname:-${host}}
+        add_cert_to_db ${nickname:-${host}} ${cf}
+    done
+    rm -f $cf
+}
+
 # Functions to read/write localStorage/sessionStorage.
 # https://developer.mozilla.org/en-US/docs/Web/Guide/API/DOM/Storage
 # {scope, key} must be unique in the localStorage/sessionStorage
@@ -267,26 +391,25 @@ function quote_str_for_sqlite3 {
     (
         str="$1"
         tmp_db=$(mktemp)
-        perl -E "\
-              use DBI;\
-              my \$dbh = DBI->connect(q[dbi:SQLite:dbname=${tmp_db}], \
-                 q{}, q{}, { RaiseError => 1, AutoCommit => 0 });\
-              say \$dbh->quote(q{${str}});\
-        "
+        
+        perl -E "
+            use DBI;
+            my \$dbh = DBI->connect(q[dbi:SQLite:dbname=${tmp_db}],
+                q{}, q{}, { RaiseError => 1, AutoCommit => 0 });
+            say \$dbh->quote(q{${str}});"
+        
         rm -f ${tmp_db}
     )
 }
 
 function get_path_to_localstorage {
     (
-        dir=$(make_sure_firefox_db_dir)
-        dir="${dir}/webappsstore.sqlite"
+        dir=$(make_sure_firefox_db_dir)/webappsstore.sqlite
+        
         if [ -r "${dir}" ];then
             echo "${dir}"
-            return $(true && echo $?)
         else
-            echo ''
-            return $(false || echo $?)
+            false
         fi
     )
 }
@@ -297,7 +420,8 @@ function read_value_from_localstorage {
         scope="$2"
         
         if [ "${key}"x = x ];then
-            echo "read_from_localstorage need at least an argument as the key"
+            echo "read_from_localstorage need at least an argument as the key" >&2
+            echo "read_from_localstorage key [scope]" >&2
             return $(false || echo $?)
         fi
         
@@ -320,8 +444,10 @@ function read_secure_from_localstorage {
     (
         key="$1"
         scope="$2"
+        
         if [ "${key}"x = x ];then
-            echo "read_from_localstorage need at least an argument as the key"
+            echo "read_from_localstorage need at least an argument as the key" >&2
+            echo "read_from_localstorage key [scope]" >&2
             return $(false || echo $?)
         fi
         
@@ -344,8 +470,10 @@ function read_owner_from_localstorage {
     (
         key="$1"
         scope="$2"
+
         if [ "${key}"x = x ];then
-            echo "read_from_localstorage need at least an argument as the key"
+            echo "read_from_localstorage need at least an argument as the key" >&2
+            echo "read_from_localstorage key [scope]" >&2
             return $(false || echo $?)
         fi
         
@@ -369,8 +497,8 @@ function delete_from_localstorage {
         key="$1"
         scope="$2"
         if [ "${key}"x = x ];then
-            echo "delete_from_localstorage need at least an argument as follows"
-            echo "delete_from_localstorage key [scope]"
+            echo "delete_from_localstorage need at least an argument as follows" >&2
+            echo "delete_from_localstorage key [scope]" >&2
             return $(false || echo $?)
         fi
         
@@ -399,8 +527,8 @@ function write_to_localstorage {
         secure="$4"
         owner="$5"
         if [ "${scope}"x = x -o "${key}"x = x -o "${value}x" = x ];then
-            echo "write_to_localstorage need at least three arguments as follows"
-            echo "write_to_localstorage scope key value [secure] [owner]"
+            echo "write_to_localstorage need at least three arguments as follows" >&2
+            echo "write_to_localstorage scope key value [secure] [owner]" >&2
             return $(false || echo $?)
         fi
 
@@ -413,6 +541,7 @@ function write_to_localstorage {
                 exit $(false || echo $?)
             fi
         fi
+
         if eval "jq -n -M -c '@sh | ${value}' > /dev/null 2>&1";then
             value=$(jq -n -M -c "@sh | ${value}")
         else
@@ -420,15 +549,19 @@ function write_to_localstorage {
             echo $value >&2
             exit $(false || echo $?)
         fi
+
         scope=$(quote_str_for_sqlite3 "${scope}")
         key=$(quote_str_for_sqlite3 "${key}")
         value=$(quote_str_for_sqlite3 "${value}")
+
         if [ "${secure}"x != x ];then
             secure=$(quote_str_for_sqlite3 "${secure}")
         fi
+
         if [ "${owner}"x != x ];then
             owner=$(quote_str_for_sqlite3 "${owner}")
         fi
+        
         db="$(get_path_to_localstorage)"
         tbl='webappsstore2'
         
@@ -446,7 +579,11 @@ function setting_vnc_password {
         dir=$(get_home_dir)
         # passwd=$(pwgen -c -n -s 32 1)
         [ -d ${dir}/.vnc ] || mkdir ${dir}/.vnc
-        [ -e ${dir}/.vnc/passwd ] || touch  ${dir}/.vnc/passwd && chmod 600 ${dir}/.vnc/passwd
+        if ! [ -e ${dir}/.vnc/passwd ];then
+            touch  ${dir}/.vnc/passwd
+            chmod 600 ${dir}/.vnc/passwd
+        fi
+
         echo ${passwd:-redhat} | vncpasswd -f > ${dir}/.vnc/passwd
     )
 }

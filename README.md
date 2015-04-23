@@ -1,4 +1,4 @@
-# Firefox-as-Daemon
+## Firefox-as-Daemon ##
 
 ## Why we need run firefox as daemon?
 
@@ -32,7 +32,7 @@ We use RHEL6/CentOS as examples.
 
 If need, pls run command as follows
 
-    yum -y install tigervnc-server
+    yum -y install tigervnc-server pwgen
 
 ##### Install firefox and tools to control it
 
@@ -41,6 +41,10 @@ If need, pls run command as follows
 ##### Install Perl modules and jq
 
     yum -y install perl-Config-IniFiles perl-DBI perl-DBD-SQLite jq
+
+##### Install util-linux and gnutls-utils
+
+    yum -y install util-linux-ng gnutls-utils
 
 ##### Create a common user
 

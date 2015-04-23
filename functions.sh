@@ -100,7 +100,6 @@ function set_firefox_user_pref {
         cat ${tempfile} > ${file}
         echo "user_pref(\"${key}\", $value);" >> ${file}
         rm -f ${tempfile}
-        wait_a_while
     )
 }
 
@@ -270,13 +269,14 @@ function close_firefox_win {
         dir=$(get_firefox_db_dir)
         lock="${dir}/.parentlock"
 
-        setsid fuser -s -k ${lock} 2>&1 > /dev/null
-        wait_a_while
+        setsid fuser -s -k ${lock}
+        wait_a_while;wait_a_while
         
         if [ -e "${lock}" ];then
             for ((i=0;i<10;i++));do
                 if [ -e "${lock}" ];then
-                    setsid fuser -s -k ${lock} 2>&1 > /dev/null
+                    is_firefox_open && setsid fuser -s -k ${lock} \
+                        || break
                     wait_a_while
                     is_firefox_open || break
                 else
@@ -301,11 +301,13 @@ function get_ssl_cert_from_remote {
     (
         host=$1
         port=$2
+        
         if [ -z "${host}" ];then
             echo 'Function get_ssl_cert_from_remote need at least one argument' >&2
             echo 'Usage: get_ssl_cert_from_remote host [port]' >&2
             exit $(false || echo $?)
         fi
+        
         gnutls-cli -p ${port:-443} --insecure --print-cert ${host} < /dev/null \
             | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p'
     )
@@ -313,10 +315,13 @@ function get_ssl_cert_from_remote {
 
 function get_nickname_from_cert {
     cert=$1
+    
     if [ -z "${cert}" ];then
-        echo 'Function get_nickname_from_cert need an argument'
-        echo 'Usage: get_nickname_from_cert path_to_certification'
+        echo 'Function get_nickname_from_cert need an argument' >&2
+        echo 'Usage: get_nickname_from_cert path_to_certification' >&2
+        exit $(false || echo $?)
     fi
+    
     openssl x509 -in ${cert} -noout -subject | cut -s -d'/' -f 7 | cut -s -d'=' -f 2
 }
 
@@ -333,54 +338,66 @@ function add_cert_to_db {
         nickname=$1
         certification=$2
         trust_type=$3
+        
         if [ -z "${nickname}" -o -z "${certification}" ];then
             echo 'Function add_cert_to_db need at least 2 arguments' >&2
             echo 'Usage: add_cert_to_db nickname certification [trust_type]' >&2
             exit $(false || echo $?)
         fi
+        
         dir=$(get_firefox_db_dir)
         certutil -A -t ${trust_type:-P} -n "${nickname}" -d ${dir} -i "${certification}"
-        wait_a_while
     )
 }
 
 function remove_cert_from_db {
     (
         nickname=$1
+        
         if [ -z "${nickname}" ];then
             echo 'Function remove_cert_from_db need 1 arguments' >&2
             exit $(false || echo $?)
         fi
+        
         dir=$(get_firefox_db_dir)
+        
         certutil -D -n "${nickname}" -d ${dir}
-        wait_a_while
     )
 }
 
 function add_cert_for_each_host_of {
     cf=$(mktemp)
+    
     for p in $@;do
         host=$(echo ${p} | cut -d : -f 1)
         port=$(echo ${p} | cut -s -d : -f 2)
+        nickname=$(echo ${p} | cut -s -d : -f 3)
+        
         get_ssl_cert_from_remote ${host} ${port:-443} > $cf
                                                                        
         is_cert_in_db ${nickname:-${host}} \
             || add_cert_to_db ${nickname:-${host}} ${cf}
     done
+    
     rm -f $cf
 }
 
 function update_cert_for_each_host_of {
     cf=$(mktemp)
+    
     for p in $@;do
         host=$(echo ${p} | cut -d : -f 1)
         port=$(echo ${p} | cut -s -d : -f 2)
+        nickname=$(echo ${p} | cut -s -d : -f 3)
+
         get_ssl_cert_from_remote ${host} ${port:-443} > $cf
                                                                        
         is_cert_in_db ${nickname:-${host}} \
             && remove_cert_from_db ${nickname:-${host}}
+        
         add_cert_to_db ${nickname:-${host}} ${cf}
     done
+    
     rm -f $cf
 }
 
@@ -455,13 +472,16 @@ function read_secure_from_localstorage {
         tbl=webappsstore2
 
         key=$(quote_str_for_sqlite3 "${key}")
+        
         if [ "${scope}"x != x ];then
             scope=$(quote_str_for_sqlite3 "${scope}")
             where_clause="WHERE scope = ${scope} AND key = ${key}"  
         else
             where_clause="WHERE key = ${key}"
         fi
+        
         select_clause="SELECT secure FROM ${tbl} ${where_clause}"
+
         sqlite3 -batch -noheader ${db} "${select_clause}"
     )
 }
@@ -481,13 +501,16 @@ function read_owner_from_localstorage {
         tbl=webappsstore2
 
         key=$(quote_str_for_sqlite3 "${key}")
+
         if [ "${scope}"x != x ];then
             scope=$(quote_str_for_sqlite3 "${scope}")
             where_clause="WHERE scope = ${scope} AND key = ${key}"  
         else
             where_clause="WHERE key = ${key}"
         fi
+        
         select_clause="SELECT owner FROM ${tbl} ${where_clause}"
+
         sqlite3 -batch -noheader ${db} "${select_clause}"
     )
 }
@@ -506,6 +529,7 @@ function delete_from_localstorage {
         tbl='webappsstore2'
 
         key=$(quote_str_for_sqlite3 "${key}")
+        
         if [ "${scope}"x != x ];then
             scope=$(quote_str_for_sqlite3 "${scope}")
             where_clause="WHERE scope = ${scope} AND key = ${key}"  
@@ -566,9 +590,10 @@ function write_to_localstorage {
         tbl='webappsstore2'
         
         delete_clause="DELETE FROM ${tbl} WHERE scope = ${scope} AND key = ${key}"
-        
         insert_clause="INSERT INTO ${tbl} (scope, key, value, secure, owner) VALUES"
-        sqlite3 ${db} "${delete_clause};${insert_clause} (${scope}, $key, $value, ${secure:-''}, ${owner:-''})"
+        insert_clause="${insert_clause} (${scope}, $key, $value, ${secure:-''}, ${owner:-''})"
+
+        sqlite3 ${db} "${delete_clause};${insert_clause}"
     )
 }
 

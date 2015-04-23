@@ -34,6 +34,10 @@ If need, pls run command as follows
 
     yum -y install tigervnc-server pwgen
 
+or install [KVM](http://www.linux-kvm.org), pls reference
+
+[KVM and CentOS-6](http://wiki.centos.org/HowTos/KVM).
+
 ##### Install firefox and tools to control it
 
     yum -y install firefox nss-tools
@@ -64,21 +68,23 @@ If need, pls run command as follows
     # run firefox, then kill it
     firefox
     . bash-functions-for-firefox/functions.sh
+
+If need, set VNC password
+
     setting_vnc_password 123456
     
 ##### Setting firefox
 
-    set_firefox_no_session_restore
-    set_firefox_no_password_remember
+    set_firefox
     # if need, setting kerberos authentication
-    set_firefox_support_krb5_auth
-    # For self-signed certification site, we need manully import certification file
-    cf=$(mktemp)
-    get_ssl_cert_from_remote server_dns_name server_port > $cf
-    nickname=$(get_nickname_from_cert $cf)
-    # Add the cert if it not in the db
-    is_cert_in_db ${nickname} || add_cert_to_db ${nickname} ${cf}
-    rm -f $cf
+    set_firefox_support_krb5_auth kerberos_auth_domain_in_lowcase
+    # For self-signed certification site, we need manully import certification file.
+    # You can avoid the port and nickname parts of the arguments
+    # in the following line, then we will use their default values.
+    # The default value of port is 443.
+    # The default value of nickname is the host name.
+    add_cert_for_each_host_of hostname1:port1:nickname1 hostname2:port2:nickname2 ...
+
     
 #### Script to start vncserver when machine boot and start firefox
 
@@ -91,7 +97,15 @@ If need, pls run command as follows
     vncserver -kill :1
     nohup vncserver -localhost -geometry 1024x768 -depth 24 & 
     wait_a_while
-    export DISPLAY=:1
+    export DISPLAY=:1.0
+    open_firefox_win www.firefox.com
+
+If we use a KVM machine for the daemon, we just do as following
+
+    #!/bin/bash
+    cd $(dirname $0)
+    . bash-functions-for-firefox/functions.sh
+    export DISPLAY=:0.0
     open_firefox_win www.firefox.com
 
 And add execution permission for this file
@@ -114,9 +128,11 @@ firefox-as-daemon could be found in PATH or use its absolute path.
 
     close_firefox_win
 
-    set_firefox_no_session_restore
+    set_firefox
 
     set_firefox_support_krb5_auth [site]
+
+    open_firefox_win
     
 Setting kerberos authentication for a 'site'. If no site given, setting  
 to 'https://'
@@ -133,10 +149,6 @@ to 'https://'
 Get certification files from remote server and output the certification  
 file on the stdout 
 
-    get_nickname_from_cert cert_file
-
-Extract nickname from a certification file and output it on the stdout.
-
     is_cert_in_db nickname
 
 Get a nickname as input and check whether certification file related  
@@ -149,6 +161,11 @@ Add certification to the db
     remove_cert_from_db nickname
 
 Remove certification file from db
+
+     # If the nickname have existed, skip
+     add_cert_for_each_host_of hostname1:port1:nickname1 hostname2:port2:nickname2 ...
+     # If the nickname have existed, remove it, then add.
+     update_cert_for_each_host_of hostname1:port1:nickname1 hostname2:port2:nickname2 ...
 
 ### Functions to read/write [localStorage/sessionStorage](https://developer.mozilla.org/en-US/docs/Web/Guide/API/DOM/Storage)
 
@@ -170,6 +187,8 @@ Just let your [JavaScript](http://en.wikipedia.org/wiki/JavaScript) codes write 
 
 #### 1. read\_*\_from\_localstorage key \[scope\]
 
+The * could be 'value', 'secure', or 'owner'.
+
      read_value_from_localstorage 'key' 'github.com.:https:443'
 
 #### 2. write\_to\_localstorage scope key value \[secure\] \[owner\]
@@ -182,6 +201,8 @@ Just let your [JavaScript](http://en.wikipedia.org/wiki/JavaScript) codes write 
     delete_from_localstorage 'key' 'github.com.:https:443'
 
 ### Control vncserver
+
+It seems that [KVM](http://www.linux-kvm.org) is better.
 
     setting_vnc_password [passwd]
 

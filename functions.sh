@@ -197,12 +197,17 @@ function set_firefox {
             signon.rememberSignons
             dom.disable_window_move_resize
             dom.disable_window_status_change
-            update_notifications.enabled'
+            update_notifications.enabled
+            security.warn_entering_secure
+            security.warn_entering_weak'
         
         firefox_prefs_boolean_true='
             browser.tabs.loadDivertedInBackground
             browser.cache.memory.enable
-            dom.allow_scripts_to_close_windows'
+            dom.allow_scripts_to_close_windows
+            dom.disable_image_src_set
+            dom.disable_window_flip
+            '
         
         set_firefox_user_pref_in_mass 'false' ${firefox_prefs_boolean_false}
         set_firefox_user_pref_in_mass 'true' ${firefox_prefs_boolean_true}
@@ -374,7 +379,7 @@ function add_cert_for_each_host_of {
         nickname=$(echo ${p} | cut -s -d : -f 3)
         
         get_ssl_cert_from_remote ${host} ${port:-443} > $cf
-                                                                       
+        
         is_cert_in_db ${nickname:-${host}} \
             || add_cert_to_db ${nickname:-${host}} ${cf}
     done
@@ -391,7 +396,7 @@ function update_cert_for_each_host_of {
         nickname=$(echo ${p} | cut -s -d : -f 3)
 
         get_ssl_cert_from_remote ${host} ${port:-443} > $cf
-                                                                       
+        
         is_cert_in_db ${nickname:-${host}} \
             && remove_cert_from_db ${nickname:-${host}}
         
@@ -428,6 +433,32 @@ function get_path_to_localstorage {
         else
             false
         fi
+    )
+}
+
+function read_from_localstorage {
+    (
+        key="$1"
+        scope="$2"
+        
+        if [ "${key}"x = x ];then
+            echo "read_from_localstorage need at least an argument as the key" >&2
+            echo "read_from_localstorage key [scope]" >&2
+            return $(false || echo $?)
+        fi
+        
+        db=$(get_path_to_localstorage)
+        tbl=webappsstore2
+
+        key=$(quote_str_for_sqlite3 "${key}")
+        if [ "${scope}"x != x ];then
+            scope=$(quote_str_for_sqlite3 "${scope}")
+            where_clause="WHERE scope = ${scope} AND key = ${key}"  
+        else
+            where_clause="WHERE key = ${key}"
+        fi
+        select_clause="SELECT * FROM ${tbl} ${where_clause}"
+        sqlite3 -batch -noheader ${db} "${select_clause}"
     )
 }
 
@@ -590,7 +621,8 @@ function write_to_localstorage {
         tbl='webappsstore2'
         
         delete_clause="DELETE FROM ${tbl} WHERE scope = ${scope} AND key = ${key}"
-        insert_clause="INSERT INTO ${tbl} (scope, key, value, secure, owner) VALUES"
+        insert_clause='PRAGMA synchronous = FULL;INSERT INTO'
+        insert_clause="${insert_clause} ${tbl} (scope, key, value, secure, owner) VALUES"
         insert_clause="${insert_clause} (${scope}, $key, $value, ${secure:-''}, ${owner:-''})"
 
         sqlite3 ${db} "${delete_clause};${insert_clause}"

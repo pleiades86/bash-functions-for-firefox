@@ -218,18 +218,22 @@ For what the follow settings do, pls reference
 ### 1. Boolean settings
 
     security.csp.enable
-    dom.disable_open_during_load
     browser.sessionstore.restore_on_demand
     browser.tabs.warnOnClose
     browser.tabs.warnOnOpen
     browser.sessionstore.enabled
-    signon.rememberSignons
     browser.tabs.loadDivertedInBackground
     browser.cache.memory.enable
+    signon.rememberSignons
+    dom.disable_open_during_load
     dom.allow_scripts_to_close_windows
     dom.disable_window_move_resize
     dom.disable_window_status_change
+    dom.disable_image_src_set
+    dom.disable_window_flip
     update_notifications.enabled
+    security.warn_entering_secure
+    security.warn_entering_weak
     
 ### 2. Number/String settings
 

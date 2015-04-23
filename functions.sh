@@ -207,6 +207,7 @@ function set_firefox {
             dom.allow_scripts_to_close_windows
             dom.disable_image_src_set
             dom.disable_window_flip
+            dom.storage.enabled
             '
         
         set_firefox_user_pref_in_mass 'false' ${firefox_prefs_boolean_false}
@@ -215,6 +216,7 @@ function set_firefox {
         set_firefox_user_pref 'browser.link.open_newwindow' 3
         set_firefox_user_pref 'dom.max_script_run_time' 60
         set_firefox_user_pref 'dom.popup_maximum' 60
+        #        set_firefox_user_pref 'dom.storage.default_quota' 10240
         set_firefox_user_pref 'browser.startup.page' 1
     )
 }
@@ -229,7 +231,11 @@ function open_firefox_win {
 
         for ((i = 0; i < 300; i++));do
             if is_firefox_open;then
-                break
+                if [ -e "$(get_firefox_db_dir)/webappsstore.sqlite" ];then
+                    break
+                else
+                    wait_a_while
+                fi
             else
                 wait_a_while
             fi
@@ -426,10 +432,10 @@ function quote_str_for_sqlite3 {
 
 function get_path_to_localstorage {
     (
-        dir=$(make_sure_firefox_db_dir)/webappsstore.sqlite
+        dir=$(make_sure_firefox_db_dir)
         
         if [ -r "${dir}" ];then
-            echo "${dir}"
+            echo "${dir}/webappsstore.sqlite"
         else
             false
         fi
@@ -568,7 +574,7 @@ function delete_from_localstorage {
             where_clause="WHERE key = ${key}"
         fi
         
-        sqlite3 ${db} "DELETE FROM ${tbl} ${where_clause}"
+        sqlite3 -batch ${db} "DELETE FROM ${tbl} ${where_clause}"
     )
 }
 
@@ -621,8 +627,8 @@ function write_to_localstorage {
         tbl='webappsstore2'
         
         delete_clause="DELETE FROM ${tbl} WHERE scope = ${scope} AND key = ${key}"
-        insert_clause='PRAGMA synchronous = FULL;INSERT INTO'
-        insert_clause="${insert_clause} ${tbl} (scope, key, value, secure, owner) VALUES"
+        insert_clause="INSERT INTO ${tbl} (scope, key, value, secure, owner)"
+        insert_clause="${insert_clause} VALUES"
         insert_clause="${insert_clause} (${scope}, $key, $value, ${secure:-''}, ${owner:-''})"
 
         sqlite3 ${db} "${delete_clause};${insert_clause}"

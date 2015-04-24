@@ -1,7 +1,7 @@
 # Requirements (package names on CentOS)
 #
 # perl perl-Config-IniFiles jq sqlite3 perl(DBI) perl(DBD::SQLite)
-# util-linux-ng gnutls-utils pwgen
+# util-linux-ng gnutls-utils pwgen ed
 #
 # sqlite3 need more latest version or we cannot access the sqlites
 # owned by Firefox.
@@ -33,7 +33,6 @@ function enable_show_input_for_tty {
     fi
 }
 
-
 # Functions to get xul/Firefox pathes
 function get_current_user_name {
     id -u -n
@@ -46,10 +45,21 @@ function get_home_dir {
     )
 }
 
+function is_firefox_db_dir {
+    (
+        section="$1"
+        home=$(get_home_dir)
+        if [ -e ${home}/.mozilla/firefox/profiles.ini ];then
+            true
+        else
+            false
+        fi
+    )
+}
+
 function get_firefox_db_dir {
     (
         section="$1"
-        ret=$(true && echo $?)
         home=$(get_home_dir)
         if [ -e ${home}/.mozilla/firefox/profiles.ini ];then
             dir=$(perl -E "
@@ -59,42 +69,38 @@ function get_firefox_db_dir {
               ->val(q{${section:-Profile0}}, q{Path});")
             dir=${home}/.mozilla/firefox/${dir}
         else
-            dir=''
-            ret=$(false || echo $?)
+            echo "Failed to get the home dir of firefox" >&2
+            exit 1
         fi
         echo $dir
-        return ${ret}
     )
 }
 
+# Functions to init Firefox
 function make_sure_firefox_db_dir {
     (
-        dir=$(get_firefox_db_dir)
-        if [ "${dir}"x = x ];then
+        home=$(get_home_dir)
+        if [ ! -e ${home}/.mozilla/firefox/profiles.ini ];then            
             open_firefox_win
             close_firefox_win
-            get_firefox_db_dir
-        else
-            echo $dir
         fi
-        
-        return $(true && echo $?)
+        get_firefox_db_dir
     )
 }
 
-# Functions to control Firefox
 function set_firefox_user_pref {
     (
         key=${1:-};
         value=${2:-}
+
         if [ "${key}"x = x ];then
             echo "Need at least one argument" >&2
-            exit $(false || echo $?)
+            exit 1
         fi
         [ "${value}"x = x ] && value='false'
 
         tempfile=$(mktemp)
-        dir=$(get_firefox_db_dir)
+        dir=$(make_sure_firefox_db_dir)
         file=${dir}/prefs.js
         grep -v "user_pref(\"${key}\"," ${file} > ${tempfile}
         cat ${tempfile} > ${file}
@@ -108,7 +114,7 @@ function set_firefox_user_pref_in_mass {
         value=${1:-};
         if [ "${value}"x = x ];then
             echo "Need at least one argument" >&2
-            exit $(false || echo $?)
+            exit 1
         fi
         shift
         cmds=$(mktemp)
@@ -136,7 +142,7 @@ function set_firefox_user_pref_in_mass {
 function set_firefox_no_session_restore {
     (
         tempfile=$(mktemp)
-        dir=$(get_firefox_db_dir)
+        dir=$(make_sure_firefox_db_dir)
         file=${dir}/prefs.js
         grep -v "user_pref(\"browser.sessionstore.enabled\"," ${file} \
             | grep -v "user_pref(\"browser.sessionstore.resume_from_crash\"," > ${tempfile}
@@ -152,7 +158,7 @@ function set_firefox_support_krb5_auth {
     (
         site=$1
         tempfile=$(mktemp)
-        dir=$(get_firefox_db_dir)
+        dir=$(make_sure_firefox_db_dir)
         file=${dir}/prefs.js
         grep -v "user_pref(\"network.negotiate-auth.trusted-uris\"," ${file} \
             | grep -v "user_pref(\"network.negotiate-auth.delegation-uris\"," > ${tempfile}
@@ -167,7 +173,7 @@ function set_firefox_support_krb5_auth {
 function set_firefox_no_password_remember {
     (
         tempfile=$(mktemp)
-        dir=$(get_firefox_db_dir)
+        dir=$(make_sure_firefox_db_dir)
         file=${dir}/prefs.js
         grep -v "user_pref(\"signon.rememberSignons\"," ${file} > ${tempfile}
         cat ${tempfile} > ${file}
@@ -178,14 +184,6 @@ function set_firefox_no_password_remember {
 
 function set_firefox {
     (
-        if [ "$(get_firefox_db_dir)"x = x ];then
-            open_firefox_win
-            if ! is_firefox_open;then
-                echo "Cannot find firefox home dir"
-                exit $(false || echo $?)
-            fi
-            close_firefox_win
-        fi
         firefox_prefs_boolean_false='
             security.csp.enable
             dom.disable_open_during_load
@@ -221,6 +219,7 @@ function set_firefox {
     )
 }
 
+# Functions to control firefox
 function open_firefox_win {
     (
         uri=$1
@@ -249,7 +248,7 @@ function open_firefox_tab {
 
         if ! is_X_ok;then
             echo 'Firefox need an X server' >&2
-            exit $(false || echo $?)
+            exit 1
         fi    
         
         { firefox --new-tab "${uri:-http://redhat.com}"; } 2>&1 > /dev/null
@@ -260,16 +259,20 @@ function open_firefox_tab {
 function is_firefox_open {
     (
         if ! is_X_ok;then
-            exit $(false || echo $?)
+            return 1
         fi
+
+        is_firefox_db_dir || return 1
+        
         dir=$(get_firefox_db_dir)
+        
         if [ "${dir}"x = x ];then
-            return $(false || echo $?)
+            return 1
         else
             if [ -e ${dir}/.parentlock ];then
                 fuser -s ${dir}/.parentlock
             else
-                return $(false || echo $?)
+                return 1
             fi
         fi
     )
@@ -299,7 +302,7 @@ function close_firefox_win {
         if [ -e "${lock}" ];then
             if fuser -s "${lock}";then
                 echo 'Failed to close Firefox' >&2
-                exit $(false || echo $?)
+                exit 1
             else
                 rm -f ${lock}
             fi
@@ -316,7 +319,7 @@ function get_ssl_cert_from_remote {
         if [ -z "${host}" ];then
             echo 'Function get_ssl_cert_from_remote need at least one argument' >&2
             echo 'Usage: get_ssl_cert_from_remote host [port]' >&2
-            exit $(false || echo $?)
+            exit 1
         fi
         
         gnutls-cli -p ${port:-443} --insecure --print-cert ${host} < /dev/null \
@@ -330,7 +333,7 @@ function get_nickname_from_cert {
     if [ -z "${cert}" ];then
         echo 'Function get_nickname_from_cert need an argument' >&2
         echo 'Usage: get_nickname_from_cert path_to_certification' >&2
-        exit $(false || echo $?)
+        exit 1
     fi
     
     openssl x509 -in ${cert} -noout -subject | cut -s -d'/' -f 7 | cut -s -d'=' -f 2
@@ -353,7 +356,7 @@ function add_cert_to_db {
         if [ -z "${nickname}" -o -z "${certification}" ];then
             echo 'Function add_cert_to_db need at least 2 arguments' >&2
             echo 'Usage: add_cert_to_db nickname certification [trust_type]' >&2
-            exit $(false || echo $?)
+            exit 1
         fi
         
         dir=$(get_firefox_db_dir)
@@ -367,7 +370,7 @@ function remove_cert_from_db {
         
         if [ -z "${nickname}" ];then
             echo 'Function remove_cert_from_db need 1 arguments' >&2
-            exit $(false || echo $?)
+            exit 1
         fi
         
         dir=$(get_firefox_db_dir)
@@ -437,7 +440,8 @@ function get_path_to_localstorage {
         if [ -r "${dir}" ];then
             echo "${dir}/webappsstore.sqlite"
         else
-            false
+            echo "Failed to get the path to localstorage database" >&2
+            exit 1
         fi
     )
 }
@@ -450,7 +454,7 @@ function read_from_localstorage {
         if [ "${key}"x = x ];then
             echo "read_from_localstorage need at least an argument as the key" >&2
             echo "read_from_localstorage key [scope]" >&2
-            return $(false || echo $?)
+            exit 1
         fi
         
         db=$(get_path_to_localstorage)
@@ -476,7 +480,7 @@ function read_value_from_localstorage {
         if [ "${key}"x = x ];then
             echo "read_from_localstorage need at least an argument as the key" >&2
             echo "read_from_localstorage key [scope]" >&2
-            return $(false || echo $?)
+            exit 1
         fi
         
         db=$(get_path_to_localstorage)
@@ -502,7 +506,7 @@ function read_secure_from_localstorage {
         if [ "${key}"x = x ];then
             echo "read_from_localstorage need at least an argument as the key" >&2
             echo "read_from_localstorage key [scope]" >&2
-            return $(false || echo $?)
+            exit 1
         fi
         
         db=$(get_path_to_localstorage)
@@ -531,7 +535,7 @@ function read_owner_from_localstorage {
         if [ "${key}"x = x ];then
             echo "read_from_localstorage need at least an argument as the key" >&2
             echo "read_from_localstorage key [scope]" >&2
-            return $(false || echo $?)
+            exit 1
         fi
         
         db=$(get_path_to_localstorage)
@@ -559,7 +563,7 @@ function delete_from_localstorage {
         if [ "${key}"x = x ];then
             echo "delete_from_localstorage need at least an argument as follows" >&2
             echo "delete_from_localstorage key [scope]" >&2
-            return $(false || echo $?)
+            exit 1
         fi
         
         db="$(get_path_to_localstorage)"
@@ -590,7 +594,7 @@ function write_to_localstorage {
         if [ "${scope}"x = x -o "${key}"x = x -o "${value}x" = x ];then
             echo "write_to_localstorage need at least three arguments as follows" >&2
             echo "write_to_localstorage scope key value [secure] [owner]" >&2
-            return $(false || echo $?)
+            exit 1
         fi
 
         if [ -r "${value}" -a -f "${value}" ];then
@@ -599,7 +603,7 @@ function write_to_localstorage {
                 value=$(jq -M -c '.' "${file}")
             else
                 echo "jq cannnot parse the file $file" >&2
-                exit $(false || echo $?)
+                exit 1
             fi
         fi
 
@@ -608,7 +612,7 @@ function write_to_localstorage {
         else
             echo "write_to_localstorage: cannot covert the value to JSON" >&2
             echo $value >&2
-            exit $(false || echo $?)
+            exit 1
         fi
 
         scope=$(quote_str_for_sqlite3 "${scope}")

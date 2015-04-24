@@ -40,15 +40,15 @@ or install [KVM](http://www.linux-kvm.org), pls reference
 
 ##### Install firefox and tools to control it
 
-    yum -y install firefox nss-tools
+    yum -y install firefox nss-tools ed
 
 ##### Install Perl modules and jq
 
     yum -y install perl-Config-IniFiles perl-DBI perl-DBD-SQLite jq
 
-##### Install util-linux and gnutls-utils
+##### Install util-linux, gnutls-utils, and openssl
 
-    yum -y install util-linux-ng gnutls-utils
+    yum -y install util-linux-ng gnutls-utils openssl
 
 ##### Create a common user
 

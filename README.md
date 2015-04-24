@@ -221,7 +221,6 @@ For what the follow settings do, pls reference
     browser.sessionstore.restore_on_demand
     browser.tabs.warnOnClose
     browser.tabs.warnOnOpen
-    browser.sessionstore.enabled
     browser.tabs.loadDivertedInBackground
     browser.cache.memory.enable
     signon.rememberSignons
@@ -245,3 +244,5 @@ For what the follow settings do, pls reference
     dom.max_script_run_time
     dom.popup_maximum
     toolkit.storage.synchronous
+    browser.sessionstore.max_tabs_undo
+    browser.sessionstore.max_windows_undo

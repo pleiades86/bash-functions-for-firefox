@@ -190,7 +190,6 @@ function set_firefox {
             browser.sessionstore.restore_on_demand
             browser.tabs.warnOnClose
             browser.tabs.warnOnOpen
-            browser.sessionstore.enabled
             browser.sessionstore.resume_from_crash
             signon.rememberSignons
             dom.disable_window_move_resize
@@ -210,6 +209,8 @@ function set_firefox {
         
         set_firefox_user_pref_in_mass 'false' ${firefox_prefs_boolean_false}
         set_firefox_user_pref_in_mass 'true' ${firefox_prefs_boolean_true}
+#        set_firefox_user_pref 'browser.sessionstore.max_tabs_undo' 10
+#        set_firefox_user_pref 'browser.sessionstore.max_windows_undo' 3
         set_firefox_user_pref 'toolkit.storage.synchronous' 1
         set_firefox_user_pref 'browser.link.open_newwindow' 3
         set_firefox_user_pref 'dom.max_script_run_time' 60

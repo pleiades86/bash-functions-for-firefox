@@ -18,7 +18,7 @@ function is_X_ok {
 # Functions to control /dev/tty.
 # If need we will give more functions.
 function is_tty {
-    tty -s
+    tty -s && [ "${EMACS}" != "t" ]
 }
 
 function disable_show_input_for_tty {

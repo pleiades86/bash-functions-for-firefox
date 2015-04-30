@@ -23,7 +23,8 @@
         known: {
             name: {
                 msg: 'mod_triger message',
-                ticket: 'mod_triger ticket'
+                ticket: 'mod_triger ticket',
+                agent: 'mod_triger agent'
             },
             uuid: {
                 mod_id: 'ce9e3143-abee-4356-b1a1-2e0f27d037a7',
@@ -37,7 +38,7 @@
         },
         
 
-        gen: function() {
+        uuidgen: function() {
             var d = new Date().getTime();
             var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
                     .replace(/[xy]/g, function(c) {
@@ -56,18 +57,47 @@
             descr: 'JavaScript functions about HTML5 for mod_triger'
         },
 
-        
+        /*
+         *  Agent(path)
+         *  Agent(path, inserted_js_file_path)
+         *  Agent(path, inserted_js_file_path, win)
+         *  Agent(path, inserted_js_file_path, win, status)
+         */
         Agent: function(path, inserted_js_file_path) {
-            this.id = mod_triger.known.uuid.agent_id;
-            this.path = path;
-            this.js_file_path = inserted_js_file_path;
-            this.is_the_js_file_insert = false;  
+            var i = arguments.length;
+            this.path = '';
+            this.js_file_path = '';
             this.win = null;
-            this.agent_id = mod_triger.uuidgen();
             this.status = 'need_open';
+            this.is_the_js_file_insert = false;
+            this.is_control_agent = false;
+            this.data_structure_id = mod_triger.known.uuid.agent_id;
+            this.data_structure_name = mod_triger.known.name.agent;
+            this.id = mod_triger.uuidgen();
             this.msg_be_sent = {};
             this.msg_we_sent = {};
-            this.is_control_agent = false;
+
+            if (i > 0) {
+                this.path = arguments[0];
+            }
+            else if (i > 1) {
+                this.js_file_path = arguments[1];
+            }
+            else if (i > 2) {
+                this.win = arguments[2];
+            }
+            else if (i > 3) {
+                this.status = arguments[3];
+            }
+            else if (i > 4) {
+                this.is_the_js_file_insert = arguments[4];
+            }
+            else if (i > 5) {
+                this.is_control_agent = arguments[5];
+            }
+            else if (i > 6) {
+                throw 'It is too much arguments to create an Agent'
+            }
         },
 
         AgentStatus: function(status_str) {
@@ -158,7 +188,7 @@
         get_agent_by_its_id: function(uuid) {
             var agent = null;
             for (var i = 0;i < Agents.length;i++) {
-                if (Agents[i].agent_id == uuid) {
+                if (Agents[i].id == uuid) {
                     agent = Agents[i];
                     break;
                 }
@@ -218,13 +248,18 @@
             
             return agents;
         },
-        
+
+        /*
+         *  Message()
+         *  Message(type)
+         *  Message(type, data)
+         */
         Message: function(type, data) {
             if (type in mod_triger.msg_type) {
                 this.name = mod_triger.known.name.msg;
-                this.id = mod_triger.known.uuid.msg_id,
+                this.data_structure_id = mod_triger.known.uuid.msg_id,
                 this.path = window.location.pathname;
-                this.msg_id = mod_triger.uuidgen();
+                this.id = mod_triger.uuidgen();
                 this.type = type;
                 this.data = data;
             }
@@ -236,11 +271,11 @@
         msg_type: {
             'ack': {
                 to_create: function(msg_received) {
-                    var msg_id_of_msg_received = msg_received.data.msg_id;
+                    var id_of_msg_received = msg_received.data.id;
                     return new mod_triger.Message(
                         'ack',
                         {
-                            reply_to_msg: msg_id_of_msg_received
+                            reply_to_msg: id_of_msg_received
                         }
                     );
                 }
@@ -277,7 +312,7 @@
 
         is_msg: function(msg) {
             if (msg.name == mod_triger.msg.name
-                && msg.id == mod_triger.known.uuid.msg_id
+                && msg.data_structure_id == mod_triger.known.uuid.msg_id
                 && (msg.type in mod_triger.msg_type))
                 return true;
             return false;
@@ -387,7 +422,7 @@
 
             try {
                 var data = JSON.parse(e.data);
-                if ('id' in data && data.id == mod_triger.known.uuid.msg_id) {
+                if ('id' in data && data.data_structure_id == mod_triger.known.uuid.msg_id) {
                     if (data.type == 'insert_js') {
                         mod_triger
                             .insert_js_file(data.data.js_file_path);

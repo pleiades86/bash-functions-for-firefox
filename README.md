@@ -233,9 +233,19 @@ For what the follow settings do, pls reference
     update_notifications.enabled
     security.warn_entering_secure
     security.warn_entering_weak
-    
+    toolkit.telemetry.rejected
+    toolkit.telemetry.enabled
+    datareporting.healthreport.service.enabled
+    datareporting.healthreport.uploadEnabled
+    datareporting.healthreport.service.firstRun
+    datareporting.healthreport.service.firstRun
+    datareporting.healthreport.logging.consoleEnabled
+    datareporting.policy.dataSubmissionEnabled
+    datareporting.policy.dataSubmissionPolicyAccepted
+            
 ### 2. Number/String settings
 
+    javascript.enabled
     network.negotiate-auth.trusted-uris
     network.negotiate-auth
     browser.link.open_newwindow
@@ -246,3 +256,14 @@ For what the follow settings do, pls reference
     toolkit.storage.synchronous
     browser.sessionstore.max_tabs_undo
     browser.sessionstore.max_windows_undo
+    set_firefox_user_pref
+    datareporting.policy.dataSubmissionPolicyResponseType
+
+## About HTML5 features of Firefox
+
+### 1. About the SorageEvent
+
+Pls visit here
+[Using the Web Storage API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API/Using_the_Web_Storage_API)
+and
+[Web Storage](http://www.w3.org/TR/webstorage/#event-storage).

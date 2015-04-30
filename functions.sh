@@ -57,6 +57,18 @@ function is_firefox_db_dir {
     )
 }
 
+function remove_firefox_db_dir {
+    home_dir=$(get_home_dir)
+    
+    if [ -d ${home_dir}/.cache/mozilla/firefox ];then
+        rm -rf ${home_dir}/.cache/mozilla/firefox
+    fi
+
+    if is_firefox_db_dir;then
+        rm -rf ${home_dir}/.mozilla/firefox
+    fi
+}
+
 function get_firefox_db_dir {
     (
         section="$1"
@@ -84,6 +96,16 @@ function make_sure_firefox_db_dir {
             open_firefox_win
             close_firefox_win
         fi
+        for ((i=0;i<120;i++));do
+            if [ -e ${home}/.mozilla/firefox/profiles.ini ];then
+                dir=$(get_firefox_db_dir)
+                if [ -e ${dir}/prefs.js -a -e ${dir}/webappsstore.sqlite ];then
+                    wait_a_while
+                    break
+                fi
+            fi
+            wait_a_while
+        done
         get_firefox_db_dir
     )
 }
@@ -196,16 +218,24 @@ function set_firefox {
             dom.disable_window_status_change
             update_notifications.enabled
             security.warn_entering_secure
-            security.warn_entering_weak'
+            security.warn_entering_weak
+            toolkit.telemetry.enabled
+            datareporting.healthreport.service.enabled
+            datareporting.healthreport.uploadEnabled
+            datareporting.healthreport.service.firstRun
+            datareporting.healthreport.logging.consoleEnabled
+            datareporting.policy.dataSubmissionEnabled
+            datareporting.policy.dataSubmissionPolicyAccepted'
         
         firefox_prefs_boolean_true='
+            javascript.enabled
             browser.tabs.loadDivertedInBackground
             browser.cache.memory.enable
             dom.allow_scripts_to_close_windows
             dom.disable_image_src_set
             dom.disable_window_flip
             dom.storage.enabled
-            '
+            toolkit.telemetry.rejected'
         
         set_firefox_user_pref_in_mass 'false' ${firefox_prefs_boolean_false}
         set_firefox_user_pref_in_mass 'true' ${firefox_prefs_boolean_true}
@@ -217,6 +247,8 @@ function set_firefox {
         set_firefox_user_pref 'dom.popup_maximum' 60
         #        set_firefox_user_pref 'dom.storage.default_quota' 10240
         set_firefox_user_pref 'browser.startup.page' 1
+        set_firefox_user_pref 'toolkit.telemetry.prompted' 2
+        set_firefox_user_pref 'datareporting.policy.dataSubmissionPolicyResponseType' '"accepted-info-bar-dismissed"'
     )
 }
 
@@ -469,7 +501,18 @@ function read_from_localstorage {
             where_clause="WHERE key = ${key}"
         fi
         select_clause="SELECT * FROM ${tbl} ${where_clause}"
-        sqlite3 -batch -noheader ${db} "${select_clause}"
+        
+        for ((i=0;i<60;i++));do
+            if sqlite3 -batch -noheader ${db} "${select_clause}" 2> /dev/null;then
+                break
+            else
+                if [ $i -eq 59 ];then
+                    echo 'Failed to read/write sqlite' >&2
+                    exit 1
+                fi
+                wait_a_while
+            fi
+        done
     )
 }
 
@@ -495,7 +538,18 @@ function read_value_from_localstorage {
             where_clause="WHERE key = ${key}"
         fi
         select_clause="SELECT value FROM ${tbl} ${where_clause}"
-        sqlite3 -batch -noheader ${db} "${select_clause}"
+        
+        for ((i=0;i<60;i++));do
+            if sqlite3 -batch -noheader ${db} "${select_clause}" 2> /dev/null;then
+                break
+            else
+                if [ $i -eq 59 ];then
+                    echo 'Failed to read/write sqlite' >&2
+                    exit 1
+                fi
+                wait_a_while
+            fi
+        done
     )
 }
 
@@ -524,7 +578,17 @@ function read_secure_from_localstorage {
         
         select_clause="SELECT secure FROM ${tbl} ${where_clause}"
 
-        sqlite3 -batch -noheader ${db} "${select_clause}"
+        for ((i=0;i<60;i++));do
+            if sqlite3 -batch -noheader ${db} "${select_clause}" 2> /dev/null;then
+                break
+            else
+                if [ $i -eq 59 ];then
+                    echo 'Failed to read/write sqlite' >&2
+                    exit 1
+                fi
+                wait_a_while
+            fi
+        done
     )
 }
 
@@ -553,7 +617,17 @@ function read_owner_from_localstorage {
         
         select_clause="SELECT owner FROM ${tbl} ${where_clause}"
 
-        sqlite3 -batch -noheader ${db} "${select_clause}"
+        for ((i=0;i<60;i++));do
+            if sqlite3 -batch -noheader ${db} "${select_clause}" 2> /dev/null;then
+                break
+            else
+                if [ $i -eq 59 ];then
+                    echo 'Failed to read/write sqlite' >&2
+                    exit 1
+                fi
+                wait_a_while
+            fi
+        done
     )
 }
 
@@ -578,8 +652,18 @@ function delete_from_localstorage {
         else
             where_clause="WHERE key = ${key}"
         fi
-        
-        sqlite3 -batch ${db} "DELETE FROM ${tbl} ${where_clause}"
+
+        for ((i=0;i<60;i++));do
+            if sqlite3 -batch ${db} "DELETE FROM ${tbl} ${where_clause}" 2> /dev/null;then
+                break
+            else
+                if [ $i -eq 59 ];then
+                    echo 'Failed to read/write sqlite' >&2
+                    exit 1
+                fi
+                wait_a_while
+            fi
+        done
     )
 }
 
@@ -600,7 +684,7 @@ function write_to_localstorage {
 
         if [ -r "${value}" -a -f "${value}" ];then
             file="${value}"
-            if eval "jq -M -c '.' \"${file}\" >/dev/null 2>&1";then
+            if eval "jq -M -c '.' \"${file}\" > /dev/null 2>&1";then
                 value=$(jq -M -c '.' "${file}")
             else
                 echo "jq cannnot parse the file $file" >&2
@@ -636,7 +720,17 @@ function write_to_localstorage {
         insert_clause="${insert_clause} VALUES"
         insert_clause="${insert_clause} (${scope}, $key, $value, ${secure:-''}, ${owner:-''})"
 
-        sqlite3 ${db} "${delete_clause};${insert_clause}"
+        for ((i=0;i<60;i++));do
+            if sqlite3 ${db} "${delete_clause};${insert_clause}" 2> /dev/null;then
+                break
+            else
+                if [ $i -eq 59 ];then
+                    echo 'Failed to read/write sqlite' >&2
+                    exit 1
+                fi
+                wait_a_while
+            fi
+        done
     )
 }
 
@@ -653,5 +747,37 @@ function setting_vnc_password {
         fi
 
         echo ${passwd:-redhat} | vncpasswd -f > ${dir}/.vnc/passwd
+    )
+}
+
+# Functions of message bus
+function produce_control_page {
+    (
+        cat > control.html <<EOF
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Automation</title>
+  </head>
+  <body>
+    <h3>Automation</h3>
+    <p>Just a demo.</p>
+  </body>
+</html>
+EOF
+cat > tunnel.html <<EOF
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Automation</title>
+  </head>
+  <body>
+    <h3>Automation</h3>
+    <p>Just a demo.</p>
+  </body>
+</html>
+EOF
     )
 }

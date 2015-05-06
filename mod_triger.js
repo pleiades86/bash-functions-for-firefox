@@ -402,124 +402,70 @@
         message: {
             types: {
                 ack: {
-                    to_create: function() {
-
-                        var msg_to_reply = new Array();
-                        var len = arguments.length;
-
-                        if (len == 0)
-                            throw 'The ' + type + ' message need at least an argument';
-
-                        for (var i = 0;i < len; i++) {
-                            var msg_received = arguments[i];
-                            var id_of_msg_received = msg_received.data.id;
-                            msg_to_reply.push(id_of_msg_received);
-                        }
+                    to_create: function(msg_received) {
+                        var id_of_msg_received = msg_received.id;
                         
                         var msg = new mod_triger.Message(
                             'ack',
                             {
-                                reply_to_msg: msg_to_reply
+                                reply_to: id_of_msg_received
                             }
                         );
                         
                         return msg;
                     },
 
-                    when_receive: function(msg) {
-                        var data = JSON.parse(msg.data);
-                        var msgs_ids_be_replied = data.data.reply_to_msg;
-
-                        var msgs_sent = mod_tirger.Messages.sent;
-
-                        for (var i = 0;i < msgs_ids_be_replied.length;i++) {
-                            var msg_id = msgs_ids_be_replied[i];
-                            if (msg_id in msgs_sent)
-                                delete msgs_sent[msg_id];
-                        }                        
+                    when_receive: function(msg_received) {
+                        var msg_id = msg_received.id;
+                        var Sent = mod_triger.Messages.Sent;
+                        
+                        if (msg_id in Sent)
+                            delete Sent[msg_id];
                     },
 
-                    to_send: function(msg_received) {
-                        var data = JSON.parse(msg_received.data);
-
-                        if (data.type == 'ack')
+                    to_send: function(msg_received, win) {
+                        if (msg_received.type == 'ack')
                             return;
                         
-                        var source = msg_received.source;
-                        var reply_msg = mod_triger.message.types.ack.to_create(msg_received);
-                        send_msg_to(reply_msg, win);
+                        var msg =
+                                mod_triger.message.types.ack.to_create(msg_received);
+                        
+                        send_msg_to(msg, win);
                     }
                 },
                 
                 normal: {
-                    to_create: function() {
+                    to_create: function(data) {
                         var msg, type;
-                        var msg_to_reply = new Array();
                         
                         type = 'normal';
                         
-                        if (arguments.length == 0) {
-                            throw 'Need at least an argument to create a' + type + ' message';
-                        }
-                        
-                        if (arguments.length == 1) {
-                            msg = new mod_triger.Message(
-                                type,
-                                { data: arguments[0] }
-                            );
-                        }
-                        
-                        if (arguments.length > 1) {
-                            
-                            for (var i = 1;i < len; i++) {
-                                var msg_received = arguments[i];
-                                var id_of_msg_received = msg_received.data.id;
-                                msg_to_reply.push(id_of_msg_received);
-                            }    
-                            
-                            msg = new mod_triger.Message(
-                                type,
-                                {
-                                    reply_to_msg: msg_to_reply,
-                                    data: arguments[0]
-                                }
-                            );
-                        }
+                        msg = new mod_triger.Message(
+                            type,
+                            { data: data }
+                        );                        
                         
                         return msg;
                     },
                     
-                    when_receive: function(msg) {
-                        var data = JSON.parse(msg.data);
-                        var msg_id = data.id;
+                    when_receive: function(msg, win) {
+                        var msg_id = msg.id;
                         
                         mod_triger.Messages.Received[msg_id] = {
-                            data: data,
-                            source: msg.source
+                            msg: msg,
+                            source: win
                         };
                         
-                        mod_triger.message.types.ack.to_send(msg);
+                        mod_triger.message.types.ack.to_send(msg, win);
                     },
 
-                    to_send: function() {
-                        var data, win;
-                        
-                        if (window.opener)
-                            win = window.opener;
-                        if (arguments.length == 0)
-                            throw 'Need an arugment';
-
-                        if (arguments.length > 0)
-                            data = arguments[0];
-
-                        if (arguments.length > 1)
-                            win = arguments[1];
-
-                        if (arguments.length > 2)
-                            throw 'Too many arguments';
-
+                    to_send: function(data, win) {
                         var msg = mod_triger.message.types.normal.to_create(data);
-                        send_msg_to(msg, win);
+                        mod_triger.message.send_msg_to(msg, win);
+                        mod_triger.Messages.Sent[msg.id] = {
+                            msg: msg,
+                            source: win
+                        };
                     }
                 },
 
@@ -527,104 +473,83 @@
                  * Don't implement the urgent type
                  */
                 urgent: {
-                    to_create: function(obj) {
-                        var msg, type;
-                        var msg_to_reply = new Array();
-                        
-                        var type = 'urgent';
+                    to_create: function() {
+                        throw 'Not implement now';
+                    },
 
-                        if (arguments.length == 0) {
-                            throw 'Need at least an argument to create a' + type + ' message';
-                        }
-                        
-                        if (arguments.length == 1) {
-                            msg = new mod_triger.Message(
-                                type,
-                                { data: arguments[0] }
-                            );
-                        }
-                        
-                        if (arguments.length > 1) {
-
-                            for (var i = 1;i < len; i++) {
-                                var msg_received = arguments[i];
-                                var id_of_msg_received = msg_received.data.id;
-                                msg_to_reply.push(id_of_msg_received);
-                            }
-                            
-                            msg = new mod_triger.Message(
-                                type,
-                                {
-                                    reply_to_msg: msg_to_reply,
-                                    data: arguments[0]
-                                }
-                            );
-                        }
-                        
-                        return msg;
-                    }
+                    when_receive: function() {
+                        throw 'Not implement now';
+                    },
                     
+                    to_send: function() {
+                        throw 'Not implement now';
+                    }
                 },
                 
                 ping: {
                     to_create: function() {
-                        var msg, type, id_of_msg_received;
-
+                        var msg;
                         var type = 'ping';
                         
                         if (arguments.length == 0) {
-                            msg = new mod_triger.Message(
-                                type,
-                                {}
-                            );
-                        }
-                        
-                        if (arguments.length == 1) {
-                            id_of_msg_received = arguments[0].data.id;
-                            msg = new mod_triger.Message(
-                                type,
-                                { reply_to_msg: id_of_msg_received }
-                            );
-                        } else
-                        if (arguments.length > 1) {
+
                             msg = new mod_triger.Message(
                                 type,
                                 {
-                                    reply_to_msg: id_of_msg_received,
-                                    data: arguments[1]
+                                    reply_to: ''
                                 }
                             );
-                        } else
-                        if (arguments.length > 2) {
-                            throw 'Too much arguments to create a' + type + ' message';
                         }
-                        
+                        else if (arguments.length == 1) {
+                            
+                            var msg_received = arguments[0];
+                            var id_of_msg_received = msg_received.id;
+                            
+                            msg = new mod_triger.Message(
+                                type,
+                                {
+                                    reply_to: id_of_msg_received
+                                }
+                            );
+                        }
+                        else
+                            throw 'Too many arguments';
+                            
                         return msg;
                     },    
 
-                    when_receive: function(msg) {
-                        var win = msg.source;
-                        var data = JSON.parse(msg.data);
-                        
-                        if ('reply_to_msg' in data.data) {
-                            var msgs_ids_be_replied = data.data.reply_to_msg;
-
-                            var msgs_sent = mod_triger.Messages.Sent;
-                            for (var i = 0;i < msgs_ids_be_replied.length;i++) {
-                                var msg_id = msgs_ids_be_replied[i];
-                                if (msg_id in msgs_sent)
-                                    delete msgs_sent[msg_id];
-                            }
-                        }
-
-                        var msg = mod_triger.message.types.ping.to_create();
-                        mod_triger.message.send_msg_to(msg, win);
-                        
+                    when_receive: function(msg_received, win) {
+                        var msg = mod_triger.message.types.ping.to_create(msg_received);
+                        mod_triger.message.types.ping.to_send(win, msg_received);
+                        mod_triger.message.types.ack.to_send(msg_received, win);
+                        mod_triger.Messages.Received[msg.id] = {
+                            msg: msg,
+                            source: win
+                        };
                     },
 
-                    to_send: function(win) {
-                        var msg = mod_triger.message.types.ping.to_create();
+                    to_send: function() {
+                        var msg_received, win, msg;
+                        
+                        var len = arguments.length;
+                        
+                        if (len == 1) {
+                            win = arguments[0];
+                            msg = mod_triger.message.types.ping.to_create();
+                        }
+                        else if (len == 2 ) {
+                            win = arguments[0];
+                            msg_received = arguments[1];
+                            msg = mod_triger.message.types.ping.to_create(msg_received);
+                        }
+                        else
+                            throw 'Too many arguments';
+                        
                         mod_triger.message.send_msg_to(msg, win);
+                        mod_triger.Messages.Sent[msg.id] = {
+                            msg: msg,
+                            source: win
+                        };
                     }
                 }
             },
@@ -654,7 +579,9 @@
 
             send_msg_to: function() {
                 var msg, win;
-                win = window.opener;
+
+                if (window.opener)
+                    win = window.opener;
                 
                 if (arguments.length == 0)
                     throw 'Need at least an argument'
@@ -684,17 +611,15 @@
                     return;
 
                 try {
-                    var data = JSON.parse(e.data);
+                    var msg = JSON.parse(e.data);
                     
-                    if (! mod_triger.message.is_msg(data))
+                    if (! mod_triger.message.is_msg(msg))
                         return;
                     
-                    if (mod_triger.message.is_msg(data))
-                        mod_triger.Messages.Received[data.id] = {
-                            data: data,
-                            source: e.source,
-                            origin: e.origin
-                        };
+                    mod_triger.Messages.Received[msg.id] = {
+                        msg: msg,
+                        source: e.source
+                    };
                 }
                 catch(e) {
                     ;

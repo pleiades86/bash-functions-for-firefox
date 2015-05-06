@@ -1049,7 +1049,7 @@ function get_localstorage_parameters_by_origin {
         hosts_localstorage_info=''
         for r in $(read_from_localstorage "${search_key}");do
             origin_r="$(echo $r | cut -d '|' -f 3)"
-            host_r="$(get_host_from_url \"${origin_r}\")"
+            host_r="$(get_host_from_url ${origin_r})"
             scheme_r="$(echo $r | cut -d '|' -f 1 | cut -d ':' -f 2)"
             port_r="$(echo $r | cut -d '|' -f 1 | cut -d ':' -f 3)"
             if [ "${host_r}" = "${host}" \
@@ -1074,7 +1074,7 @@ function is_localstorage_parameters_ok {
     (
         ok=0
         for p in "$@";do
-            ret="$(get_localstorage_parameters_by_origin \"${p}\")"
+            ret="$(get_localstorage_parameters_by_origin ${p})"
             if [ "${ret}"x = x ];then
                 ok=1
                 break
@@ -1186,7 +1186,7 @@ function read_ticket_for_url {
         fi
 
         if is_localstorage_parameters_ok "${url}";then
-            parameters="$(get_localstorage_parameters_by_origin '${url}')"
+            parameters="$(get_localstorage_parameters_by_origin ${url})"
             scope="$(echo $parameters | cut -d '|' -f 1)"
             secure="$(echo $parameters | cut -d '|' -f 2)"
             owner="$(echo $parameters | cut -d '|' -f 3)"
@@ -1212,7 +1212,7 @@ function read_ticket_status_for_url {
         fi
 
         if is_localstorage_parameters_ok "${url}";then
-            parameters="$(get_localstorage_parameters_by_origin '${url}')"
+            parameters="$(get_localstorage_parameters_by_origin ${url})"
             scope="$(echo $parameters | cut -d '|' -f 1)"
             secure="$(echo $parameters | cut -d '|' -f 2)"
             owner="$(echo $parameters | cut -d '|' -f 3)"
@@ -1239,7 +1239,7 @@ function read_ticket_process_status_for_url {
         fi
 
         if is_localstorage_parameters_ok "${url}";then
-            parameters="$(get_localstorage_parameters_by_origin '${url}')"
+            parameters="$(get_localstorage_parameters_by_origin ${url})"
             scope="$(echo $parameters | cut -d '|' -f 1)"
             secure="$(echo $parameters | cut -d '|' -f 2)"
             owner="$(echo $parameters | cut -d '|' -f 3)"
@@ -1265,7 +1265,7 @@ function read_ticket_tm_utc_for_url {
         fi
 
         if is_localstorage_parameters_ok "${url}";then
-            parameters="$(get_localstorage_parameters_by_origin '${url}')"
+            parameters="$(get_localstorage_parameters_by_origin ${url})"
             scope="$(echo $parameters | cut -d '|' -f 1)"
             secure="$(echo $parameters | cut -d '|' -f 2)"
             owner="$(echo $parameters | cut -d '|' -f 3)"
@@ -1291,7 +1291,7 @@ function read_ticket_tm_local_for_url {
         fi
 
         if is_localstorage_parameters_ok "${url}";then
-            parameters="$(get_localstorage_parameters_by_origin '${url}')"
+            parameters="$(get_localstorage_parameters_by_origin ${url})"
             scope="$(echo $parameters | cut -d '|' -f 1)"
             secure="$(echo $parameters | cut -d '|' -f 2)"
             owner="$(echo $parameters | cut -d '|' -f 3)"
@@ -1317,7 +1317,7 @@ function read_ticket_results_for_url {
         fi
 
         if is_localstorage_parameters_ok "${url}";then
-            parameters="$(get_localstorage_parameters_by_origin '${url}')"
+            parameters="$(get_localstorage_parameters_by_origin ${url})"
             scope="$(echo $parameters | cut -d '|' -f 1)"
             secure="$(echo $parameters | cut -d '|' -f 2)"
             owner="$(echo $parameters | cut -d '|' -f 3)"

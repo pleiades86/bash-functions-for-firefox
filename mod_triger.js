@@ -415,8 +415,12 @@
                         return msg;
                     },
 
-                    when_receive: function(msg_received) {
-                        var msg_id = msg_received.id;
+                    when_receive: function() {
+                        if (arguments.length == 0)
+                            throw 'Need an argument';
+                        
+                        var msg_received = arguments[0];
+                        var msg_id = msg_received.data.reply_to;
                         var Sent = mod_triger.Messages.Sent;
                         
                         if (msg_id in Sent)
@@ -430,7 +434,7 @@
                         var msg =
                                 mod_triger.message.types.ack.to_create(msg_received);
                         
-                        send_msg_to(msg, win);
+                        mod_triger.message.send_msg_to(msg, win);
                     }
                 },
                 
@@ -496,7 +500,8 @@
                             msg = new mod_triger.Message(
                                 type,
                                 {
-                                    reply_to: ''
+                                    reply_to: '',
+                                    status: false
                                 }
                             );
                         }
@@ -508,24 +513,26 @@
                             msg = new mod_triger.Message(
                                 type,
                                 {
-                                    reply_to: id_of_msg_received
+                                    reply_to: id_of_msg_received,
+                                    status: false
                                 }
                             );
                         }
                         else
                             throw 'Too many arguments';
-                            
+                        
                         return msg;
                     },    
 
                     when_receive: function(msg_received, win) {
-                        var msg = mod_triger.message.types.ping.to_create(msg_received);
-                        mod_triger.message.types.ping.to_send(win, msg_received);
-                        mod_triger.message.types.ack.to_send(msg_received, win);
-                        mod_triger.Messages.Received[msg.id] = {
-                            msg: msg,
-                            source: win
-                        };
+                        var reply = msg_received.data.reply_to;
+                        if (reply == '') {
+                            mod_triger.message.types.ping.to_send(win, msg_received);
+                        }
+
+                        else if (reply in mod_triger.Messages.Sent) {
+                            mod_triger.Messages.Sent[reply].msg.data.status = true;
+                        }
                     },
 
                     to_send: function() {
@@ -536,20 +543,20 @@
                         if (len == 1) {
                             win = arguments[0];
                             msg = mod_triger.message.types.ping.to_create();
+                            mod_triger.message.send_msg_to(msg, win);
+                            mod_triger.Messages.Sent[msg.id] = {
+                                msg: msg,
+                                source: win
+                            };
                         }
                         else if (len == 2 ) {
                             win = arguments[0];
                             msg_received = arguments[1];
                             msg = mod_triger.message.types.ping.to_create(msg_received);
+                            mod_triger.message.send_msg_to(msg, win);
                         }
                         else
                             throw 'Too many arguments';
-                        
-                        mod_triger.message.send_msg_to(msg, win);
-                        mod_triger.Messages.Sent[msg.id] = {
-                            msg: msg,
-                            source: win
-                        };
                     }
                 }
             },
@@ -612,14 +619,12 @@
 
                 try {
                     var msg = JSON.parse(e.data);
-                    
+
                     if (! mod_triger.message.is_msg(msg))
                         return;
-                    
-                    mod_triger.Messages.Received[msg.id] = {
-                        msg: msg,
-                        source: e.source
-                    };
+
+                    var type = msg.type;
+                    mod_triger.message.types[type].when_receive(msg, e.source);
                 }
                 catch(e) {
                     ;
@@ -774,7 +779,7 @@
 
         get_default_main_js_file_path: function() {
             var dir = mod_triger.get_default_js_file_dir();
-            console.log("dir " + dir);
+
             if (location.protocol == 'file:') {
                 return dir + location.pathname + '.js';
             }
@@ -828,3 +833,4 @@
         mod_triger.ticket.do();
     }
 })();
+

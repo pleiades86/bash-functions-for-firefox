@@ -485,6 +485,7 @@ function open_firefox {
             firefox "$p"
         else
             open_firefox_win "$p"
+            wait_one_minute is_firefox_open
         fi
         wait_a_while
     done

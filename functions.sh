@@ -12,28 +12,31 @@ function wait_a_while {
 }
 
 function wait_as_long_as_until {
-    time_out=$1
-    interval=$2
-    cond_exp=$3
+    (
+        time_out=$1
+        interval=$2
+        cond_exp=$3
 
-    shift 3
-    
-    if [ ${time_out} -lt ${interval} ];then
-        caller >&2
-        echo "In function wait_as_long_as_until time_out should be big than interval" >&2
-        exit 1
-    fi
-    
-    max=$(expr ${time_out} / ${interval})
-
-    for ((i=0;i<${max};i++));do
-        if [ $# -ge 1 ];then
-            ${cond_exp} "$@" && return
-        else
-            ${cond_exp} && return
+        shift 3
+        
+        if [ ${time_out} -lt ${interval} ];then
+            caller >&2
+            echo "In function wait_as_long_as_until time_out should be big than interval" >&2
+            exit 1
         fi
-        sleep ${interval}
-    done
+        
+        max=$(expr ${time_out} / ${interval})
+
+        for ((i=0;i<${max};i++));do
+            if [ $# -ge 1 ];then
+                ${cond_exp} "$@" && return
+            else
+                ${cond_exp} && return
+            fi
+            sleep ${interval}
+        done
+        false
+    )
 }
 
 function wait_thirty_seconds {
@@ -507,6 +510,14 @@ function is_firefox_open {
             fi
         fi
     )
+}
+
+function is_firefox_close {
+   if is_firefox_open;then
+       false
+   else
+       true
+   fi
 }
 
 function close_firefox_win {

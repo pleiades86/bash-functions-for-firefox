@@ -600,31 +600,32 @@
                         }
                         
                         return msg;
-                    }    
-                },
+                    },    
 
-                when_receive: function(msg) {
-                    var win = msg.source;
-                    var data = JSON.parse(msg.data);
-                    
-                    if ('reply_to_msg' in data.data) {
-                        var msgs_ids_be_replied = data.data.reply_to_msg;
+                    when_receive: function(msg) {
+                        var win = msg.source;
+                        var data = JSON.parse(msg.data);
+                        
+                        if ('reply_to_msg' in data.data) {
+                            var msgs_ids_be_replied = data.data.reply_to_msg;
 
-                        for (var i = 0;i < msgs_ids_be_replied.length;i++) {
-                            var msg_id = msgs_ids_be_replied[i];
-                            if (msg_id in msgs_sent)
-                                delete msgs_sent[msg_id];
+                            var msgs_sent = mod_triger.Messages.Sent;
+                            for (var i = 0;i < msgs_ids_be_replied.length;i++) {
+                                var msg_id = msgs_ids_be_replied[i];
+                                if (msg_id in msgs_sent)
+                                    delete msgs_sent[msg_id];
+                            }
                         }
+
+                        var msg = mod_triger.message.types.ping.to_create();
+                        mod_triger.message.send_msg_to(msg, win);
+                        
+                    },
+
+                    to_send: function(win) {
+                        var msg = mod_triger.message.types.ping.to_create();
+                        mod_triger.message.send_msg_to(msg, win);
                     }
-
-                    var msg = mod_triger.message.types.ping.to_create();
-                    mod_triger.message.send_msg_to(msg, win);
-                    
-                },
-
-                to_send: function(win) {
-                    var msg = mod_triger.message.types.ping.to_create();
-                    mod_triger.message.send_msg_to(msg, win);
                 }
             },
             
@@ -703,6 +704,7 @@
                 }
             }
 
+            
         },
 
         Ticket: function(action, obj) {
@@ -884,7 +886,7 @@
     };
     
     window.addEventListener('message',
-                            mod_triger.handler_to_store_received_msg,
+                            mod_triger.message.handler,
                             false);
 
     if (!(mod_triger.known.uuid.search_key in localStorage)) {

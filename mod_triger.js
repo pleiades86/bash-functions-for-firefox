@@ -18,7 +18,6 @@
         
         MsgReceived: {},
         MsgSent: {},
-        MsgUnknown: {},
 
         known: {
             name: {
@@ -505,7 +504,7 @@
         TicketAction: {
             insert_js_file: {
                 to_create: function(path) {
-                    var action = 'close';
+                    var action = 'insert_js_file';
                     
                     return new mod_triger.TicketAction(
                         action,
@@ -554,12 +553,13 @@
                 }
             }
         },
-        
+
+
         ticket: {
             get_from_localstorage: function() {
-                var str_ticket = localStorage.getItem(mod_triger.uuid
+                var str_ticket = localStorage.getItem(mod_triger.known.uuid
                                                       .ticket_id);
-                var ticket = JSON.parse(str_ticket);
+                return JSON.parse(str_ticket);
             },
             
             do: function() {
@@ -567,17 +567,17 @@
                                 
                 if ('target_path' in ticket 
                     && ticket.target_path != location.pathname) {
-                    declare_self_is_ready();
+                    mod_triger.declare_self_is_ready();
                     return;
                 }
                 
                 if (mod_triger.known.uuid.ticket_id in sessionStorage) {
                     var session_ticket_str =
-                            sessionStorage.getItem(mod_triger.uuid
+                            sessionStorage.getItem(mod_triger.known.uuid
                                                    .ticket_id);
                     var session_ticket = JSON.parse(session_ticket_str);
                     if (session_ticket.status == 'assigned') {
-                        declare_self_is_ready();
+                        mod_triger.declare_self_is_ready();
                         return;
                     }
                 }
@@ -588,9 +588,9 @@
                 sessionStorage.setItem(mod_triger.known.uuid.ticket_id,
                                        JSON.stringify(ticket));
                 
-                if ('js_file_path' in ticket) {
-                    mod_triger.insert_js_file(ticket.js_file_path);
-                    mod_triger.self.js_file_path = ticket.js_file_path;
+                if ('path' in ticket) {
+                    //mod_triger.insert_js_file(ticket.path);
+                    mod_triger.self.js_file_path = ticket.path;
                 }
                 else {
                     var default_js_file_path = mod_triger
@@ -603,7 +603,7 @@
                 mod_triger.self.is_the_js_file_insert = true;
                 mod_triger.self.is_control_agent = true;
                 
-                declare_self_is_ready();
+                mod_triger.declare_self_is_ready();
             },
 
             is_tkt: function(tkt) {
@@ -621,7 +621,7 @@
                         .replace(':', '.');
                 
                 return '/'
-                    + mod_triger.uuid.konwn.our_js_dir
+                    + mod_triger.konwn.uuid.our_js_dir
                     +'/'
                     + dir
                     + '/';
@@ -677,13 +677,11 @@
 
         
         declare_self_is_ready: function() {
-            var msg = new mod_triger.Message('agent_is_ready', '');
-            var msg_str = JSON.stringify(msg);
             var w = window.opener;
             if (w)
-                w.postMessage(msg_str, w.location.origin);
+                w.postMessage('ready', w.location.origin);
             else
-                mod_triger.self.status = msg;
+                mod_triger.self.status = 'ready';
         },
 
         mark_localstorage_parameters: function() {
@@ -703,17 +701,15 @@
 
     if (!(mod_triger.known.uuid.search_key in localStorage)) {
         mod_triger.mark_localstorage_parameters();
-        
         window.close();
     }
     
     if (mod_triger.known.uuid.ticket_id in localStorage) {
         if (mod_triger.self === null) {
-            var self = new Agent(window.location.pathname, '');
-            self.win = window;
-            self.path = window.location.pathname;
-            Agents.push(self);
-            mod_triger.self = self;
+            mod_triger.self = new mod_triger.Agent(window.location.pathname, window, 'active', true);
+            mod_triger.self.win = window;
+            mod_triger.self.path = window.location.pathname;
+            mod_triger.Agents.push(self);
         }
         
         mod_triger.ticket.do();

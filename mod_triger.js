@@ -630,7 +630,7 @@
             },
             
             is_msg: function(msg) {
-                if (msg.name == mod_triger.known.name.msg
+                if (msg.wrapper.name == mod_triger.known.name.msg
                     && msg.wrapper.id == mod_triger.known.uuid.msg_id
                     && (msg.type in mod_triger.message.types))
                     return true;

@@ -24,17 +24,21 @@ function wait_as_long_as_until {
             echo "In function wait_as_long_as_until time_out should be big than interval" >&2
             exit 1
         fi
+
+        err=$(mktemp)
         
         max=$(expr ${time_out} / ${interval})
 
         for ((i=0;i<${max};i++));do
             if [ $# -ge 1 ];then
-                ${cond_exp} "$@" && return
+                ${cond_exp} "$@" 2> ${err} && rm -f ${err} && return
             else
-                ${cond_exp} && return
+                ${cond_exp} 2> ${err} && rm -f ${err} && return
             fi
+            test -s ${err} && cat ${err} && rm -f ${err} && exit 1
             sleep ${interval}
         done
+        rm -f ${err}
         false
     )
 }
@@ -482,9 +486,10 @@ function open_firefox_tab {
 function open_firefox {
     for p in "$@";do
         if is_firefox_open;then
-            firefox "$p"
+#            firefox "$p"
+            open_firefox_tab "$p" 2>&1 > /dev/null
         else
-            open_firefox_win "$p"
+            open_firefox_win "$p" 2>&1 > /dev/null
             wait_one_minute is_firefox_open
         fi
         wait_a_while
@@ -1106,49 +1111,66 @@ function create_ticket {
         path="$1"
         status="$2"
         target_path="$3"
+        
         if [ "${path}"x = x ];then
             path="$(get_default_js_top_dir)main.js"
         fi
-        status="$4"
-        arguments="$6"
-        process_status="$5"
         
-        status="${status:-new}"
-        process_status="${process_status:-queuing}"
+        status="${status:-queuing}"        
         
         tm_utc="$(date -u)"
         tm_local=$(date -d "${tm_utc}")
-        
+
         if [ "${target_path}"x = x ];then
             cat <<EOF1 | jq -M -c '.'
 {
-"name": "mod_triger_ticket",
-"id": "$(get_ticket_id)",
-"path": "${path}",
+"action": "insert_js_file",
+"store": {
+    "path": "${path}"
+},
+"id": "$(uuidgen -r)",
 "tm_utc": "${tm_utc}",
 "tm_local": "${tm_local}", 
 "status": "${status}",
-"process_status": "${process_status}",
-"arguments": "${arguments:-null}",
-"results": "${results:-null}"
+"wrapper": {
+     "id": "$(get_ticket_id)",
+     "name": "mod_triger ticket"  
+}
 }
 EOF1
-        else
+
+            else
             cat <<EOF2 | jq -M -c '.'
 {
-"name": "mod_triger_ticket",
-"id": "$(get_ticket_id)",
-"path": "${path}",
+"action": "insert_js_file",
+"store": {
+    "path": "${path}"
+},
+"id": "$(uuidgen -r)",
+"tm_utc": "${tm_utc}",
+"tm_local": "${tm_local}", 
 "status": "${status}",
 "target_path": "${target_path}",
-"tm_utc": "${tm_utc}",
-"tm_local": "${tm_local}",
-"process_status": "${process_status}",
-"arguments": "${arguments:-null}",
-"results": "${results:-null}"
+"wrapper": {
+     "id": "$(get_ticket_id)",
+     "name": "mod_triger ticket"  
+}
 }
 EOF2
-            
+        fi        
+    )
+}
+
+function is_status_of_ticket_of_url_not_queuing {
+    (
+        url="$1"
+        
+        status="$(read_ticket_status_for_url ${url})"
+
+        if [ "${status}"x != x -a "${status}" != "queuing" ];then
+            true
+        else
+            false
         fi
     )
 }
@@ -1163,10 +1185,9 @@ function write_ticket_for_url {
             exit 1
         fi
         path="$1"
-        target_path="$2"
-        status="$3"
+        status="$2"
 
-        ticket="$(create_ticket ${path} ${target_path} ${status})"
+        ticket="$(create_ticket ${path} ${status})"
 
         if is_localstorage_parameters_ok "${url}";then
 
@@ -1230,34 +1251,7 @@ function read_ticket_status_for_url {
             owner="$(echo $parameters | cut -d '|' -f 3)"
             key="$(get_ticket_id)"
             read_value_from_localstorage "${key}" "${scope}" "${secure}" "${owner}" \
-                | jq -M '.status'
-        else
-            caller >&2
-            echo "None localstorage parameters found for ${url}" >&2
-            exit 1
-        fi
-    )
-}
-
-
-function read_ticket_process_status_for_url {
-    (
-        url="$1"
-        
-        if [ "${url}"x = x ];then
-            caller >&2
-            echo "Function read_ticket_process_status_for_url need at least an argument" >&2
-            exit 1
-        fi
-
-        if is_localstorage_parameters_ok "${url}";then
-            parameters="$(get_localstorage_parameters_by_origin ${url})"
-            scope="$(echo $parameters | cut -d '|' -f 1)"
-            secure="$(echo $parameters | cut -d '|' -f 2)"
-            owner="$(echo $parameters | cut -d '|' -f 3)"
-            key="$(get_ticket_id)"
-            read_value_from_localstorage "${key}" "${scope}" "${secure}" "${owner}" \
-                | jq -M '.process_status'
+                | jq -M -r '.status'
         else
             caller >&2
             echo "None localstorage parameters found for ${url}" >&2
@@ -1283,7 +1277,7 @@ function read_ticket_tm_utc_for_url {
             owner="$(echo $parameters | cut -d '|' -f 3)"
             key="$(get_ticket_id)"
             read_value_from_localstorage "${key}" "${scope}" "${secure}" "${owner}" \
-                | jq -M '.tm_utc'
+                | jq -M -r '.tm_utc'
         else
             caller >&2
             echo "None localstorage parameters found for ${url}" >&2
@@ -1309,7 +1303,7 @@ function read_ticket_tm_local_for_url {
             owner="$(echo $parameters | cut -d '|' -f 3)"
             key="$(get_ticket_id)"
             read_value_from_localstorage "${key}" "${scope}" "${secure}" "${owner}" \
-                | jq -M '.tm_local'
+                | jq -M -r '.tm_local'
         else
             caller >&2
             echo "None localstorage parameters found for ${url}" >&2
@@ -1317,33 +1311,6 @@ function read_ticket_tm_local_for_url {
         fi
     )
 }
-
-function read_ticket_results_for_url {
-    (
-        url="$1"
-        
-        if [ "${url}"x = x ];then
-            caller >&2
-            echo "Function read_ticket_results_for_url need at least an argument" >&2
-            exit 1
-        fi
-
-        if is_localstorage_parameters_ok "${url}";then
-            parameters="$(get_localstorage_parameters_by_origin ${url})"
-            scope="$(echo $parameters | cut -d '|' -f 1)"
-            secure="$(echo $parameters | cut -d '|' -f 2)"
-            owner="$(echo $parameters | cut -d '|' -f 3)"
-            key="$(get_ticket_id)"
-            read_value_from_localstorage "${key}" "${scope}" "${secure}" "${owner}" \
-                | jq -M '.results'
-        else
-            caller >&2
-            echo "None localstorage parameters found for ${url}" >&2
-            exit 1
-        fi
-    )
-}
-
 
 # Firefox need an X window. We could try VNC server for it if need.
 function setting_vnc_password {

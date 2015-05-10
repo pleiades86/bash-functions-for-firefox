@@ -13,8 +13,12 @@
     }
     
     mod_triger = {
-        self: null,        
+        self: null,
+        parent: null,
+        
         Agents: new Array(),
+        Children: new Array(),
+        
         Messages: {
             Received: {},
             Sent: {}
@@ -79,7 +83,8 @@
             this.is_control_agent = false;
             this.tkt_need_do = new Array();
             this.tkt_has_done = new Array();
-
+            this.current_tkt = null;
+            
             var i = arguments.length;
             
             if (i > 0) {
@@ -197,35 +202,7 @@
                     to_create: function() {
                         return 'no_response';
                     }
-                },
-                
-                // ticket doing status
-                progressing:  {
-                    to_create: function() {
-                        return 'progressing';
-                    }
-                },
-                done: {
-                    to_create: function() {
-                        return 'done';
-                    }
-                },
-                busy: {
-                    to_create: function() {
-                        return 'busy';
-                    }
-                },
-                failed:  {
-                    to_create: function() {
-                        return 'failed';
-                    }
-                },
-                
-                unknown_status:  {
-                    to_create: function() {
-                        return 'unkown_status';
-                    }
-                }
+                },                
             },
 
             probe_win_status: function(win) {
@@ -440,9 +417,17 @@
                 
                 normal: {
                     to_create: function(data) {
+                        var len = arguments.length;
                         var msg, type;
                         
                         type = 'normal';
+
+                        if (len == 0)
+                            data = {};
+                        else if (len == 1) 
+                            data = arguments[0];
+                        else
+                            throw 'Too many arguments';
                         
                         msg = new mod_triger.Message(
                             type,
@@ -532,6 +517,10 @@
 
                         else if (reply in mod_triger.Messages.Sent) {
                             mod_triger.Messages.Sent[reply].msg.data.status = true;
+                            mod_triger.Messages.Sent[reply].msg.data.replied_by = {
+                                msg: msg_received,
+                                source: win
+                            };
                         }
                     },
 
@@ -633,28 +622,65 @@
                     ;
                 }
             }
-
             
         },
 
-        Ticket: function(action, obj) {
-            this.action = action;
-            if (! action in ticket.actions)
-                throw acion + ': unknown aciton found'
+        /*
+         * new Ticket()
+         * new Ticket(action)
+         * new Ticket(action, obj)
+         * new Ticket(action, obj, target_path)
+         */
+        Ticket: function() {
+            var len = arguments.length;
 
-            this.store = obj;
+            if (len == 0) {
+                this.action = 'insert_js_file';
+                this.store = {
+                    path: mod_triger
+                        .get_default_main_js_file_path()
+                };
+            }
+            else if (len == 1) {
+                this.action = arguments[0];
+                this.store = {};
+            }
+            else if (len == 2) {
+                this.action = arguments[0];
+                this.store = arguments[1];
+            }
+            else if (len == 3) {
+                this.action = arguments[0];
+                this.store = arguments[1];
+                this.target_path = arguments[2];
+            }
+            
+            if (! this.action in mod_triger.ticket.actions)
+                throw this.action + ': unknown aciton found'
+
+            var dt = new Date();
+            this.tm_utc = dt.toUTCString();
+            this.tm_local = dt.toString();
+            this.status = mod_triger.ticket.status.queuing.to_create();
             this.id = mod_triger.uuidgen();
             
             this.wrapper = {
                 id: mod_triger.known.uuid.ticket_id,
-                name: mod_triger.known.uuid.ticket
+                name: mod_triger.known.name.ticket
             }
         },
 
         ticket: {
             actions: {
                 insert_js_file: {
-                    to_create: function(path) {
+                    // to_create(path) or to_create()
+                    to_create: function() {
+                        
+                        var path = mod_triger.get_default_main_js_file_path();
+                        
+                        if (arguments.length > 0)
+                            path = arguments[0];
+                        
                         var action = 'insert_js_file';
                         
                         return new mod_triger.Ticket(
@@ -663,6 +689,33 @@
                                 path: path
                             }
                         );
+                    },
+
+                    to_cash: function(tkt) {
+                        if (mod_triger.self.current_ticket)
+                            return;
+                        
+                        mod_triger.self.current_ticket = tkt;
+                        tkt.status = mod_triger.ticket.status.assigned.to_create();
+
+                        if (tkt.action != 'insert_js_file') {
+                            tkt.status = mod_triger.ticket.status.failed.to_create();
+                            throw 'Found a tiket that requires "'
+                                + tkt.action
+                                + '" action';
+                        }
+
+                        
+                        var path = tkt.store.path;
+                        
+                        tkt.status = mod_triger.ticket.status.progressing.to_create();
+                        
+                        var script_tag = document.createElement("script");
+                        script_tag.src = path;
+                        script_tag.type = 'text/javascript';
+                        document.body.appendChild(script_tag);
+                        
+                        tkt.status = mod_triger.ticket.status.done.to_create();
                     }
                 },
 
@@ -701,10 +754,67 @@
                             action,
                             data
                         );
-                    }
+                    },
                 }
             },
 
+            status: {
+                // ticket doing status
+                queuing: {
+                    to_create: function() {
+                        return 'queuing';
+                    }
+                },
+                
+                assigned: {
+                    to_create: function() {
+                        return 'assigned';
+                    }
+                },
+                
+                progressing:  {
+                    to_create: function() {
+                        return 'progressing';
+                    }
+                },
+                
+                done: {
+                    to_create: function() {
+                        return 'done';
+                    }
+                },
+                
+                busy: {
+                    to_create: function() {
+                        return 'busy';
+                    }
+                },
+                
+                failed:  {
+                    to_create: function() {
+                        return 'failed';
+                    }
+                },
+                
+                unknown_status:  {
+                    to_create: function() {
+                        return 'unknown_status';
+                    }
+                },
+            },
+            
+            send_to_agent: function(ticket, agent) {
+                mod_triger.message.types.normal.to_send(ticket, agent.win);
+            },
+            
+            send_to_win: function(ticket, win) {
+                mod_triger.message.types.normal.to_send(ticket, win);
+            },
+            
+            get_ticket_from_msg_stored: function(msg_stored) {
+                return msg_stored.msg.data.data;
+            },
+            
             get_from_localstorage: function() {
                 var str_ticket = localStorage.getItem(mod_triger.known.uuid
                                                       .ticket_id);
@@ -716,43 +826,36 @@
                 
                 if ('target_path' in ticket 
                     && ticket.target_path != location.pathname) {
-                    mod_triger.declare_self_is_complete();
+                    window.location = ticket.target_path;
                     return;
                 }
                 
-                if (mod_triger.known.uuid.ticket_id in sessionStorage) {
-                    var session_ticket_str =
-                            sessionStorage.getItem(mod_triger.known.uuid
-                                                   .ticket_id);
-                    var session_ticket = JSON.parse(session_ticket_str);
-                    if (session_ticket.status == 'assigned') {
-                        mod_triger.declare_self_is_complete();
-                        return;
-                    }
-                }
+                if (mod_triger.known.uuid.ticket_id in sessionStorage)
+                    return;
                 
-                ticket.status = "assigned";
+                ticket.status = mod_triger.ticket.status.assigned.to_create();
+                
                 localStorage.setItem(mod_triger.known.uuid.ticket_id,
                                      JSON.stringify(ticket));
+                
                 sessionStorage.setItem(mod_triger.known.uuid.ticket_id,
                                        JSON.stringify(ticket));
                 
-                if ('path' in ticket) {
+                if ('path' in ticket.store) {
                     //mod_triger.insert_js_file(ticket.path);
-                    mod_triger.self.js_file_path = ticket.path;
+                    mod_triger.self.js_file_path = ticket.store.path;
                 }
                 else {
                     var default_js_file_path = mod_triger
                             .get_default_main_js_file_path();
                     
-                    mod_triger.insert_js_file(default_js_file_path);
+                    //mod_triger.insert_js_file(default_js_file_path);
                     mod_triger.self.js_file_path = default_js_file_path;
                 }
                 
                 mod_triger.self.is_the_js_file_insert = true;
                 mod_triger.self.is_control_agent = true;
-                mod_triger.self.status = mod_triger.agent.status.active.to_create();
-                mod_triger.declare_self_is_complete();
+                mod_triger.self.status = mod_triger.agent.probe_win_status(window);
             },
 
             is_tkt: function(tkt) {
@@ -770,7 +873,7 @@
                         .replace(':', '.');
                 
                 return '/'
-                    + mod_triger.konwn.uuid.our_js_dir
+                    + mod_triger.known.uuid.our_js_dir
                     +'/'
                     + dir
                     + '/';
@@ -833,4 +936,3 @@
         mod_triger.ticket.do();
     }
 })();
-

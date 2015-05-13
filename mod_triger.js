@@ -1,4 +1,6 @@
 (function() {
+    // "use strict";
+    
     if ('mod_triger' in window) {
         var errorMsg = 'The name mod_triger has been used'; 
         if ('mod_info' in mod_triger
@@ -28,7 +30,8 @@
             name: {
                 msg: 'mod_triger message',
                 ticket: 'mod_triger ticket',
-                agent: 'mod_triger agent'
+                agent: 'mod_triger agent',
+                event: 'mod_triger_msg_urgent'
             },
             uuid: {
                 mod_id: 'ce9e3143-abee-4356-b1a1-2e0f27d037a7',
@@ -84,6 +87,7 @@
             this.tkt_need_do = new Array();
             this.tkt_has_done = new Array();
             this.current_tkt = null;
+            this.origin = null;
             
             var i = arguments.length;
             
@@ -156,12 +160,6 @@
         agent: {
             status: {
                 //agent status
-                loading: {
-                    to_create: function() {
-                        return 'loading';
-                    }
-                },
-                
                 inactive: {
                     to_create: function() {
                         return 'inactive'
@@ -328,7 +326,7 @@
                 return agents;
             },
             
-            get_agents_who_has_tkt_has_done: function() {
+            get_agents_who_has_not_tkt_has_done: function() {
                 var agents = new Array();
                 var Agents = mod_triger.Agents;
                 
@@ -376,13 +374,27 @@
             };
         },
 
+        /*
+         * when_receive: function(msg_received, win_send_this_msg, origin_to_send) 
+         * to_send(msg, win, origin)
+         */
         message: {
             types: {
                 ack: {
-                    to_create: function(msg_received) {
-                        var id_of_msg_received = msg_received.id;
+                    to_create: function() {
+                        var msg_received, id_of_msg_received, msg;
                         
-                        var msg = new mod_triger.Message(
+                        if (arguments.length != 1)
+                            throw 'Need one argument';
+
+                        msg_received = arguments[0];
+                        
+                        if (!mod_triger.message.is_msg(msg_received))
+                            throw 'No message found';
+                        
+                        id_of_msg_received = msg_received.id;
+                        
+                        msg = new mod_triger.Message(
                             'ack',
                             {
                                 reply_to: id_of_msg_received
@@ -393,25 +405,61 @@
                     },
 
                     when_receive: function() {
-                        if (arguments.length == 0)
-                            throw 'Need an argument';
+                        var msg_received, msg_id, msgs_sent;
+                        var len = arguments.length;
                         
-                        var msg_received = arguments[0];
-                        var msg_id = msg_received.data.reply_to;
-                        var Sent = mod_triger.Messages.Sent;
+                        if (len < 1)
+                            throw 'Need at least one argument';
                         
-                        if (msg_id in Sent)
-                            delete Sent[msg_id];
+                        msg_received = arguments[0];
+                        
+                        if (!mod_triger.message.is_msg(msg_received))
+                            throw 'Not a message found';
+
+                        
+                        msg_id = msg_received.data.reply_to;
+                        msgs_sent = mod_triger.Messages.Sent;
+                        
+                        if (msg_id in msgs_sent)
+                            delete msgs_sent[msg_id];
                     },
 
-                    to_send: function(msg_received, win) {
-                        if (msg_received.type == 'ack')
-                            return;
+                    to_send: function() {
+                        
+                        var msg_received, win, origin;
+                        var len = arguments.length;
+
+                        if (len < 2) {
+                            if (window.opener)
+                                throw 'Need at least one arguments';
+                            else
+                                throw 'Need at least two argument';
+                        }
+
+                        if (window.opener)
+                            win = window.opener;
+                        
+                        if (len > 0) {
+                            msg_received = arguments[0];
+                            if (msg_received.type == 'ack')
+                                return;
+                        }
+                        
+                        if (len > 1)
+                            win = arguments[1];
+
+                        if (len > 2 )
+                            origin = arguments[2];
+                        else
+                            origin = win.location.origin;
+
+                        if (len > 3)
+                            throw 'Too much arguments';
                         
                         var msg =
                                 mod_triger.message.types.ack.to_create(msg_received);
                         
-                        mod_triger.message.send_msg_to(msg, win);
+                        mod_triger.message.send_msg_to(msg, win, origin);
                     }
                 },
                 
@@ -437,41 +485,227 @@
                         return msg;
                     },
                     
-                    when_receive: function(msg, win) {
-                        var msg_id = msg.id;
+                    when_receive: function() {
+                        var msg_received, win, origin;
                         
-                        mod_triger.Messages.Received[msg_id] = {
-                            msg: msg,
-                            source: win
+                        var len = arguments.length;
+                        
+                        var msg_id;
+
+                        if (len < 2) {
+                            if (window.opener)
+                                throw 'Need at least one arguments';
+                            else
+                                throw 'Need at least two argument';
+                        }
+
+                        if (window.opener)
+                            win = window.opener;
+                        
+                        if (len > 0)
+                            msg_received = arguments[0];
+                        
+                        if (len > 1)
+                            win = arguments[1];
+
+                        if (len > 2)
+                            origin = arguments[2];
+                        else
+                            origin = win.location.origin;
+                        
+                        if (len > 3)
+                            throw 'Too much arguments';
+
+                        if (!mod_triger.message.is_msg(msg_received))
+                            throw 'No message found';
+                        
+                        mod_triger.Messages.Received[msg_received.id] = {
+                            msg: msg_received,
+                            win: win,
+                            origin: origin
                         };
                         
-                        mod_triger.message.types.ack.to_send(msg, win);
+                        mod_triger.message.types.ack.to_send(msg_received, win, origin);
                     },
 
-                    to_send: function(data, win) {
-                        var msg = mod_triger.message.types.normal.to_create(data);
-                        mod_triger.message.send_msg_to(msg, win);
+                    to_send: function() {
+                        var data, win, origin;
+                        var msg;
+                        
+                        var len = arguments.length;
+                        
+                        if (len < 2) {
+                            if (window.opener) {
+                                if (len < 1)
+                                    throw 'Need at least one arguments';
+                            }
+                            else { 
+                                throw 'Need at least two arguments';
+                            }
+                        }
+
+                        if (window.opener)
+                            win = window.opener;
+                        
+                        if (len > 0)
+                            data = arguments[0];
+
+                        if (len > 1)
+                            win = arguments[1];
+
+                        if (len > 2)
+                            origin = arguments[2];
+                        else
+                            origin = win.location.origin;
+
+                        if (len > 3)
+                            throw 'Too much arguments';
+                        
+                        msg = mod_triger.message.types.normal.to_create(data);
+                        mod_triger.message.send_msg_to(msg, win, origin);
                         mod_triger.Messages.Sent[msg.id] = {
                             msg: msg,
-                            source: win
+                            win: win,
+                            origin: origin
                         };
                     }
                 },
 
-                /*
-                 * Don't implement the urgent type
-                 */
                 urgent: {
-                    to_create: function() {
-                        throw 'Not implement now';
-                    },
+                    to_fire: function() {
+                        var msg_received, win, origin;
+                        var event;
+                        
+                        var len = arguments.length;
 
-                    when_receive: function() {
-                        throw 'Not implement now';
+                        if (len < 2) {
+                            if (window.opener)
+                                throw 'Need at least one arguments';
+                            else
+                                throw 'Need at least two argument';
+                        }
+
+                        if (len > 0)
+                            msg_received = arguments[0];
+
+                        if (len > 1)
+                            win = arguments[1];
+
+                        if (len > 2)
+                            origin = arguments[2];
+                        else
+                            origin = win.location.origin;
+
+                        event = new CustomEvent(mod_triger.known.name.event,
+                                                {'detail': {
+                                                    msg: msg_received,
+                                                    win: win,
+                                                    origin: origin
+                                                }});
+
+                        window.dispatchEvent(event);
                     },
                     
+                    to_create: function(data) {
+                        var len = arguments.length;
+                        var msg, type;
+                        
+                        type = 'urgent';
+
+                        if (len == 0)
+                            data = {};
+                        else if (len == 1) 
+                            data = arguments[0];
+                        else
+                            throw 'Too many arguments';
+                        
+                        msg = new mod_triger.Message(
+                            type,
+                            { data: data }
+                        );                        
+                        
+                        return msg;
+                    },
+                    
+                    when_receive: function() {
+                        var msg_received, win, origin;
+                        
+                        var len = arguments.length;
+                        
+                        var msg_id;
+
+                        if (len < 2) {
+                            if (window.opener)
+                                throw 'Need at least one arguments';
+                            else
+                                throw 'Need at least two argument';
+                        }
+
+                        if (window.opener)
+                            win = window.opener;
+                        
+                        if (len > 0)
+                            msg_received = arguments[0];
+                        
+                        if (len > 1)
+                            win = arguments[1];
+
+                        if (len > 2)
+                            origin = arguments[2];
+                        else
+                            origin = win.location.origin;
+                        
+                        if (len > 3)
+                            throw 'Too much arguments';
+
+                        if (!mod_triger.message.is_msg(msg_received))
+                            throw 'No message found';
+                        
+                        mod_triger.message.types.urgent.to_fire(msg_received, win, origin);
+                        
+                        mod_triger.message.types.ack.to_send(msg_received, win, origin);
+                    },
+
                     to_send: function() {
-                        throw 'Not implement now';
+                        var data, win, origin;
+                        var msg;
+                        
+                        var len = arguments.length;
+                        
+                        if (len < 2) {
+                            if (window.opener) {
+                                if (len < 1)
+                                    throw 'Need at least one arguments';
+                            }
+                            else { 
+                                throw 'Need at least two arguments';
+                            }
+                        }
+
+                        if (window.opener)
+                            win = window.opener;
+                        
+                        if (len > 0)
+                            data = arguments[0];
+
+                        if (len > 1)
+                            win = arguments[1];
+
+                        if (len > 2)
+                            origin = arguments[2];
+                        else
+                            origin = win.location.origin;
+
+                        if (len > 3)
+                            throw 'Too much arguments';
+                        
+                        msg = mod_triger.message.types.urgent.to_create(data);
+                        mod_triger.message.send_msg_to(msg, win, origin);
+                        mod_triger.Messages.Sent[msg.id] = {
+                            msg: msg,
+                            win: win,
+                            origin: origin
+                        };
                     }
                 },
                 
@@ -491,17 +725,27 @@
                             );
                         }
                         else if (arguments.length == 1) {
-                            
+                            var id_of_msg_received, msg
                             var msg_received = arguments[0];
-                            var id_of_msg_received = msg_received.id;
                             
-                            msg = new mod_triger.Message(
-                                type,
-                                {
-                                    reply_to: id_of_msg_received,
-                                    status: false
-                                }
-                            );
+                            if (mod_triger.message.is_msg(msg_received)) {
+                                id_of_msg_received = msg_received.id;
+                                msg = new mod_triger.Message(
+                                    type,
+                                    {
+                                        reply_to: id_of_msg_received,
+                                        status: false
+                                    }
+                                );
+                            }
+                            else
+                                msg = new mod_triger.Message(
+                                    type,
+                                    {
+                                        reply_to: '',
+                                        status: false
+                                    }
+                                ); 
                         }
                         else
                             throw 'Too many arguments';
@@ -509,12 +753,46 @@
                         return msg;
                     },    
 
-                    when_receive: function(msg_received, win) {
-                        var reply = msg_received.data.reply_to;
-                        if (reply == '') {
-                            mod_triger.message.types.ping.to_send(win, msg_received);
+                    when_receive: function() {
+                        var reply;
+                        var msg_received, win, origin;
+                        
+                        var len = arguments.length;
+                        
+                        if (len < 2) {
+                            if (window.opener) {
+                                if (len < 1)
+                                    throw 'Need at least one arguments';
+                            }
+                            else {
+                                throw 'Need at least two arguments';
+                            }
                         }
+                        
+                        if (window.opener)
+                            win = window.opener;
+                        
+                        if (len > 0)
+                            msg_received = arguments[0];
+                        
+                        if (len > 1)
+                            win = arguments[1];
+                        
+                        if (len > 2)
+                            origin = arguments[2];
+                        else
+                            origin = win.location.origin;
+                        
+                        if (len > 3)
+                            throw 'Too much arguments';
 
+                        if (mod_triger.message.is_msg(msg_received))
+                            reply = msg_received.data.reply_to;
+                        else
+                            throw 'No message found';
+                        
+                        if (reply == '')
+                            mod_triger.message.types.ping.to_send(msg_received, win, origin);
                         else if (reply in mod_triger.Messages.Sent) {
                             mod_triger.Messages.Sent[reply].msg.data.status = true;
                             mod_triger.Messages.Sent[reply].msg.data.replied_by = {
@@ -525,36 +803,69 @@
                     },
 
                     to_send: function() {
-                        var msg_received, win, msg;
-                        
+                        var msg_received, win, origin;
+
                         var len = arguments.length;
+
+                        if (len < 2) {
+                            if (window.opener) {
+                                if (len < 1)
+                                    throw 'Need at least one arguments';
+                            }
+                            else {
+                                throw 'Need at least two arguments';
+                            }
+                        }
                         
-                        if (len == 1) {
-                            win = arguments[0];
+                        if (window.opener)
+                            win = window.opener;
+
+                        if (len > 0)
+                            msg_received = arguments[0];
+                        
+                        if (len > 1)
+                            win = arguments[1];
+                        
+                        if (len > 2)
+                            origin = arguments[2];
+                        else
+                            origin = win.location.origin;
+                        
+                        if (len > 3)
+                            throw 'Too much arguments';
+
+                        if (mod_triger.message.is_msg(msg_received)) {
+                            msg = mod_triger.message.types.ping.to_create(msg_received);
+                        }
+                        else {
                             msg = mod_triger.message.types.ping.to_create();
-                            mod_triger.message.send_msg_to(msg, win);
                             mod_triger.Messages.Sent[msg.id] = {
                                 msg: msg,
-                                source: win
+                                win: win,
+                                origin: origin
                             };
                         }
-                        else if (len == 2 ) {
-                            win = arguments[0];
-                            msg_received = arguments[1];
-                            msg = mod_triger.message.types.ping.to_create(msg_received);
-                            mod_triger.message.send_msg_to(msg, win);
-                        }
-                        else
-                            throw 'Too many arguments';
+                        
+                        mod_triger.message.send_msg_to(msg, win, origin);
                     }
                 }
             },
             
             is_msg: function(msg) {
+                if (! msg)
+                    return false;
+                
+                if (!('type'in msg
+                      && 'wrapper' in msg
+                      && 'name' in msg.wrapper
+                      && 'id' in msg.wrapper))
+                    return false;
+                
                 if (msg.wrapper.name == mod_triger.known.name.msg
                     && msg.wrapper.id == mod_triger.known.uuid.msg_id
                     && (msg.type in mod_triger.message.types))
                     return true;
+                
                 return false;
             },
             
@@ -574,46 +885,57 @@
             },
 
             send_msg_to: function() {
-                var msg, win;
+                var msg, win, origin;
 
-                if (window.opener)
-                    win = window.opener;
+                var len = arguments.length;
+
+                if (len < 1) {
+                    if (!window.opener)                        
+                        throw 'Need at least two arguments';
+                    
+                }
                 
-                if (arguments.length == 0)
-                    throw 'Need at least an argument'
+                if (len == 0)
+                    msg = new mod_triger.Message();
 
-                if (arguments.length > 0) {
+                if (len > 0) {
                     msg = arguments[0];
                     if (! mod_triger.message.is_msg(msg))
                         throw msg + ' is not a message';
                 }
 
-                if (arguments.length > 1) {
+                if (len > 1) {
                     win = arguments[1];
                 }
 
-                if (arguments.length > 2)
-                    throw 'Too much argumemnts';
+                if (len > 2)
+                    origin = arguments[2];
+                else
+                    origin = win.location.origin;
 
-                win.postMessage(JSON.stringify(msg), win.location.origin);
+                
+                if (len > 3)
+                    throw 'To much arguments';
+                
+                win.postMessage(JSON.stringify(msg), origin);
             },
 
-            send_msg_to_agent: function(msg, agent) {
-                mod_triger.message.send_msg_to(msg, agent.win);
+            send_msg_to_agent: function() {
+                mod_triger.message.send_msg_to(msg, agent.win, agent.origin);
             },
 
             handler: function(e) {
-                if (e.origin != window.location.origin)
-                    return;
+                var msg, type;
 
                 try {
-                    var msg = JSON.parse(e.data);
-
+                    msg = JSON.parse(e.data);
+                    
                     if (! mod_triger.message.is_msg(msg))
                         return;
 
-                    var type = msg.type;
-                    mod_triger.message.types[type].when_receive(msg, e.source);
+                    type = msg.type;
+
+                    mod_triger.message.types[type].when_receive(msg, e.source, e.origin);
                 }
                 catch(e) {
                     ;
@@ -667,6 +989,22 @@
             this.wrapper = {
                 id: mod_triger.known.uuid.ticket_id,
                 name: mod_triger.known.name.ticket
+            }
+        },
+
+        get_default_js_file_dir: function() {
+            if (location.protocol == 'file:') {
+                return '';
+            }
+            else {
+                var dir = location.origin.replace(/\//g, '')
+                        .replace(':', '.');
+                
+                return '/'
+                    + mod_triger.known.uuid.our_js_dir
+                    +'/'
+                    + dir
+                    + '/';
             }
         },
 
@@ -863,23 +1201,6 @@
             }
         },
 
-        
-        get_default_js_file_dir: function() {
-            if (location.protocol == 'file:') {
-                return '';
-            }
-            else {
-                var dir = location.origin.replace(/\//g, '')
-                        .replace(':', '.');
-                
-                return '/'
-                    + mod_triger.known.uuid.our_js_dir
-                    +'/'
-                    + dir
-                    + '/';
-            }
-        },
-
         get_default_main_js_file_path: function() {
             var dir = mod_triger.get_default_js_file_dir();
 
@@ -898,6 +1219,15 @@
             document.body.appendChild(script_tag);
         },
 
+        mark_localstorage_parameters: function() {
+            if (window.location.protocol == "file:") {
+                localStorage.setItem(mod_triger.known.uuid.search_key,
+                                     window.location.pathname);
+            }
+            else
+                localStorage.setItem(mod_triger.known.uuid.search_key,
+                                     window.location.origin);
+        },
         
         declare_self_is_complete: function() {
             var w = window.opener;
@@ -907,15 +1237,6 @@
                 mod_triger.self.status = 'complete';
         },
 
-        mark_localstorage_parameters: function() {
-            if (window.location.protocol == "file:") {
-                localStorage.setItem(mod_triger.known.uuid.search_key,
-                                     window.location.pathname);
-            }
-            else
-                localStorage.setItem(mod_triger.known.uuid.search_key,
-                                     window.location.origin);
-        }
     };
     
     window.addEventListener('message',

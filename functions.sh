@@ -614,7 +614,7 @@ function add_cert_to_db {
         fi
         
         dir="$(get_firefox_db_dir)"
-        certutil -A -t "${trust_type:-P}" -n "${nickname}" -d "${dir}" -i "${certification}"
+        certutil -A -t "${trust_type:-TC,Tw,Tw}" -n "${nickname}" -d "${dir}" -i "${certification}"
     )
 }
 

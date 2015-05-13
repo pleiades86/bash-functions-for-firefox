@@ -1,6 +1,5 @@
 (function() {
-    // "use strict";
-    
+//    "use strict";
     if ('mod_triger' in window) {
         var errorMsg = 'The name mod_triger has been used'; 
         if ('mod_info' in mod_triger
@@ -991,29 +990,12 @@
                 name: mod_triger.known.name.ticket
             }
         },
-
-        get_default_js_file_dir: function() {
-            if (location.protocol == 'file:') {
-                return '';
-            }
-            else {
-                var dir = location.origin.replace(/\//g, '')
-                        .replace(':', '.');
-                
-                return '/'
-                    + mod_triger.known.uuid.our_js_dir
-                    +'/'
-                    + dir
-                    + '/';
-            }
-        },
-
+        
         ticket: {
             actions: {
                 insert_js_file: {
                     // to_create(path) or to_create()
-                    to_create: function() {
-                        
+                    to_create: function() {                        
                         var path = mod_triger.get_default_main_js_file_path();
                         
                         if (arguments.length > 0)
@@ -1030,19 +1012,60 @@
                     },
 
                     to_cash: function(tkt) {
-                        if (mod_triger.self.current_ticket)
-                            return;
-                        
-                        mod_triger.self.current_ticket = tkt;
-                        tkt.status = mod_triger.ticket.status.assigned.to_create();
+                        if (!mod_triger.ticket.is_tkt(tkt))
+                            throw 'The argument should be a ticket';
 
-                        if (tkt.action != 'insert_js_file') {
+                        var tkt_to_reply, agent_status, old_curr_tkt_status;
+                        var old_curr_tkt = null;
+                        var action = 'insert_js_file';
+
+                        if (mod_triger.self && mod_triger.self.status)
+                            agent_status = mod_triger.self.status;
+                        else
+                            agent_status = window.document.readyState;
+                        
+                        if (mod_triger.self.current_ticket) {
+                            old_curr_tkt = mod_triger.self.current_ticket;
+                            old_curr_tkt_status = old_curr_tkt.status;
+                            if (!(
+                                old_curr_tkt_status == mod_triger
+                                    .ticket
+                                    .status.done
+                                    .to_create()
+                                    ||
+                                    old_curr_tkt_status == mod_triger
+                                    .ticket
+                                    .status
+                                    .now_no_tkt
+                                    .to_create()
+                            )) {
+                                tkt_to_reply = mod_triger.ticket.actions
+                                    .reply.to_create(tkt, {
+                                        agent_status: agent_status,
+                                        ticket_status: old_curr_tkt_status
+                                    });
+                                return tkt_to_reply;
+                            }
+                        }
+                        else {
+                            old_curr_tkt_status = mod_triger
+                                .ticket.status
+                                .now_no_tkt
+                                .to_create();
+                        }
+
+                        if (tkt.action != action) {
                             tkt.status = mod_triger.ticket.status.failed.to_create();
                             throw 'Found a tiket that requires "'
                                 + tkt.action
-                                + '" action';
+                                + ', while we need a '
+                                + action
+                                + ' one';
                         }
 
+                        
+                        mod_triger.self.current_ticket = tkt;
+                        tkt.status = mod_triger.ticket.status.assigned.to_create();
                         
                         var path = tkt.store.path;
                         
@@ -1054,6 +1077,18 @@
                         document.body.appendChild(script_tag);
                         
                         tkt.status = mod_triger.ticket.status.done.to_create();
+
+                        return mod_triger
+                            .ticket
+                            .actions
+                            .reply
+                            .to_create(tkt,
+                                       mod_triger
+                                       .ticket
+                                       .status
+                                       .done
+                                       .to_create()
+                                      );
                     }
                 },
 
@@ -1065,6 +1100,64 @@
                             action,
                             {}
                         );
+                    },
+
+                    to_cash: function(tkt) {
+                        if (!mod_triger.ticket.is_tkt(tkt))
+                            throw 'The argument should be a ticket';
+
+                        var tkt_to_reply, agent_status, old_curr_tkt_status;
+                        var old_curr_tkt = null;
+                        var action = 'your_status';
+
+                        if (mod_triger.self && mod_triger.self.status)
+                            agent_status = mod_triger.self.status;
+                        else
+                            agent_status = window.document.readyState;
+                        
+                        if (mod_triger.self &&  mod_triger.self.current_ticket)
+                            old_curr_tkt = mod_triger.self.current_ticket;
+
+                        mod_triger.self.current_ticket = tkt;
+                        tkt.status = mod_triger.ticket.status.assigned.to_create();
+
+                        if (tkt.action != action) {
+                            if (old_curr_tkt)
+                                mod_triger.self.current_ticket = old_curr_tkt;
+                            
+                            return mod_triger
+                                .ticket
+                                .actions
+                                .reply
+                                .to_create(tkt,
+                                           mod_triger
+                                           .ticket
+                                           .status
+                                           .unknown_ticket
+                                           .to_create()
+                                          );
+                        }
+                        
+                        if (old_curr_tkt)
+                            old_curr_tkt_status = old_curr_tkt.status;
+                        else
+                            old_curr_tkt_status = mod_triger
+                            .ticket.status
+                            .now_no_tkt
+                            .to_create();
+
+                        tkt_reply = mod_triger.ticket.actions.reply.to_create(tkt, {
+                            agent_status: agent_status,
+                            ticket_status: old_curr_tkt_status
+                        });
+
+                        mod_triger.self.current_ticket.status =
+                            mod_triger.ticket.status.done.to_create();
+                        
+                        if (old_curr_tkt)
+                            mod_triger.current_ticket = old_curr_tkt;
+                        
+                        return tkt_reply;
                     }
                 },
                 
@@ -1076,6 +1169,81 @@
                             action,
                             {}
                         );
+                    },
+                    
+                    to_cash: function(tkt) {
+                        if (!mod_triger.ticket.is_tkt(tkt))
+                            throw 'The argument should be a ticket';
+                        
+                        var tkt_to_reply, agent_status;
+                        var old_curr_tkt_status;
+                        var old_curr_tkt = null;
+                        var action = 'close';
+
+                        if (mod_triger.self && mod_triger.self.status)
+                            agent_status = mod_triger.self.status;
+                        else
+                            agent_status = window.document.readyState;
+                        
+                        if (mod_triger.self && mod_triger.self.current_ticket)
+                            old_curr_tkt = mod_triger.self.current_ticket;
+                        
+                        
+                        mod_triger.self.current_ticket = tkt;
+                        
+                        tkt.status = mod_triger.ticket
+                            .status
+                            .assigned
+                            .to_create();
+
+                        if (old_curr_tkt) {
+                            if (
+                                old_curr_tkt_status == mod_triger
+                                    .ticket
+                                    .status.done
+                                    .to_create()
+                                    ||
+                                    old_curr_tkt_status == mod_triger
+                                    .ticket
+                                    .status
+                                    .now_no_tkt
+                                    .to_create()
+                            ) {
+                                old_curr_tkt_status =
+                                    old_curr_tkt.status;                                
+                            }
+                            else {
+                                tkt_to_reply = mod_triger.ticket.actions
+                                    .reply.to_create(tkt, {
+                                        agent_status: agent_status,
+                                        ticket_status: old_curr_tkt_status,
+                                    });
+                                return tkt_to_reply;
+                            }
+                        }
+                        else {
+                            old_curr_tkt_status = mod_triger
+                                .ticket
+                                .status
+                                .now_no_tkt
+                                .to_create();
+                        }
+                        
+                        tkt_to_reply = mod_triger.ticket.actions
+                            .reply.to_create(tkt,
+                                             mod_triger
+                                             .ticket
+                                             .status
+                                             .assigned
+                                             .to_create()
+                                            );
+
+                        mod_triger.self.current_tkt = tkt;
+                        tkt.status = mod_triger.ticket.status.assigned.to_create();
+
+                        setTimeout(function() { window.close() }, 5000);
+                        setTimeout(function() { window.close() }, 10000);
+                        return tkt_to_reply;
                     }
                 },
 
@@ -1134,19 +1302,33 @@
                     }
                 },
                 
-                unknown_status:  {
+                unknown_ticket:  {
                     to_create: function() {
-                        return 'unknown_status';
+                        return 'unknown_ticket';
                     }
                 },
+
+                now_no_tkt: {
+                    to_create: function() {
+                        return 'now_no_tkt';
+                    }
+                }
             },
             
-            send_to_agent: function(ticket, agent) {
-                mod_triger.message.types.normal.to_send(ticket, agent.win);
+            send_to_agent: function(ticket, agent, origin) {
+                mod_triger.message.types.normal.to_send(ticket, agent.win, agent.origin);
             },
             
-            send_to_win: function(ticket, win) {
-                mod_triger.message.types.normal.to_send(ticket, win);
+            send_to_win: function(ticket, win, origin) {
+                mod_triger.message.types.normal.to_send(ticket, win, origin);
+            },
+
+            send_to_agent_as_urgent: function(ticket, agent, origin) {
+                mod_triger.message.types.urgent.to_send(ticket, agent.win, agent.origin);
+            },
+            
+            send_to_win_as_urgent: function(ticket, win, origin) {
+                mod_triger.message.types.urgent.to_send(ticket, win, origin);
             },
             
             get_ticket_from_msg_stored: function(msg_stored) {
@@ -1237,20 +1419,41 @@
                 mod_triger.self.status = 'complete';
         },
 
+        
+        get_default_js_file_dir: function() {
+            if (location.protocol == 'file:') {
+                return '';
+            }
+            else {
+                var dir = location.origin.replace(/\//g, '')
+                        .replace(':', '.');
+                
+                return '/'
+                    + mod_triger.known.uuid.our_js_dir
+                    +'/'
+                    + dir
+                    + '/';
+            }
+        }
+
     };
     
-    window.addEventListener('message',
-                            mod_triger.message.handler,
-                            false);
 
     if (!(mod_triger.known.uuid.search_key in localStorage)) {
         mod_triger.mark_localstorage_parameters();
         window.close();
     }
+
+    window.addEventListener('message',
+                            mod_triger.message.handler,
+                            false);
     
     if (mod_triger.known.uuid.ticket_id in localStorage) {
         if (mod_triger.self === null) {
-            mod_triger.self = new mod_triger.Agent(window.location.pathname, window);
+            mod_triger.self = new mod_triger.Agent(window
+                                                   .location
+                                                   .pathname,
+                                                   window);
             mod_triger.Agents.push(self);
         }
         

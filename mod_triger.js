@@ -20,7 +20,7 @@
         Agents: new Array(),
         Children: new Array(),
         
-        Messages: {
+        MsgCenter: {
             Received: {},
             Sent: {}
         },
@@ -421,7 +421,7 @@
 
                         
                         msg_id = msg_received.data.reply_to;
-                        msgs_sent = mod_triger.Messages.Sent;
+                        msgs_sent = mod_triger.MsgCenter.Sent;
                         
                         if (msg_id in msgs_sent)
                             delete msgs_sent[msg_id];
@@ -522,7 +522,7 @@
                         if (!mod_triger.message.is_msg(msg_received))
                             throw 'No message found';
                         
-                        mod_triger.Messages.Received[msg_received.id] = {
+                        mod_triger.MsgCenter.Received[msg_received.id] = {
                             msg: msg_received,
                             win: win,
                             origin: origin
@@ -566,7 +566,7 @@
                         
                         msg = mod_triger.message.types.normal.to_create(data);
                         mod_triger.message.send_msg_to(msg, win, origin);
-                        mod_triger.Messages.Sent[msg.id] = {
+                        mod_triger.MsgCenter.Sent[msg.id] = {
                             msg: msg,
                             win: win,
                             origin: origin
@@ -704,7 +704,7 @@
                         
                         msg = mod_triger.message.types.urgent.to_create(data);
                         mod_triger.message.send_msg_to(msg, win, origin);
-                        mod_triger.Messages.Sent[msg.id] = {
+                        mod_triger.MsgCenter.Sent[msg.id] = {
                             msg: msg,
                             win: win,
                             origin: origin
@@ -796,9 +796,9 @@
                         
                         if (reply == '')
                             mod_triger.message.types.ping.to_send(msg_received, win, origin);
-                        else if (reply in mod_triger.Messages.Sent) {
-                            mod_triger.Messages.Sent[reply].msg.data.status = true;
-                            mod_triger.Messages.Sent[reply].msg.data.replied_by = {
+                        else if (reply in mod_triger.MsgCenter.Sent) {
+                            mod_triger.MsgCenter.Sent[reply].msg.data.status = true;
+                            mod_triger.MsgCenter.Sent[reply].msg.data.replied_by = {
                                 msg: msg_received,
                                 source: win
                             };
@@ -842,7 +842,7 @@
                         }
                         else {
                             msg = mod_triger.message.types.ping.to_create();
-                            mod_triger.Messages.Sent[msg.id] = {
+                            mod_triger.MsgCenter.Sent[msg.id] = {
                                 msg: msg,
                                 win: win,
                                 origin: origin

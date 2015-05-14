@@ -1360,6 +1360,52 @@ function setting_vnc_password {
 }
 
 # Functions of message bus
+function fire_msg_as_html {
+    (
+        msg="$1"
+        mod_triger_js="$2"
+        port="$3"
+        host="$4"
+        
+        msg="${msg:-$(create_ticket)}"
+        mod_triger_js=$(o=$(pwd);cd $(dirname $0);echo $(pwd)/mod_triger.js;cd $o)
+        if [ ! -r "${mod_triger_js}" ];then
+            old_mod_triger_js="${mod_triger_js}"
+            mod_triger_js=$(pwd)/mod_triger.js
+            if [ ! -r "${mod_triger_js}" ];then
+                echo "File ${old_mod_triger_js} not found" 2>&1
+                echo "File ${mod_triger_js} not found" 2>&1
+                exit 1
+            fi
+        fi
+        port=${port:-8080}
+        host="${host:-localhost}"
+
+        cat <<EOF | nc -C -l ${host} ${port} 2>&1 > /dev/null
+HTTP/1.1 200 OK$(echo -n -e '\r')
+Content-Type: text/html; charset=UTF-8
+Connection: close
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Messages Transfer Station</title>
+  </head>
+  <body>
+    <h3>Message Transfer Station for the mod_triger</h3>
+    <p>So, How to use this page?</p>
+    <p>We will add our ticket directly to the current agent. Let's check it now.</p>
+   <script type="text/javascript" defer>
+$(cat "${mod_triger_js}")
+mod_triger.self.tkt_need_do[JSON.parse('${msg}').id] = JSON.parse('${msg}');
+   </script>
+  </body>
+</html>
+EOF
+    )
+}
+
 function produce_ctrl_pages {
     (
         path_to_mod_triger_js="$1"
@@ -1375,7 +1421,7 @@ function produce_ctrl_pages {
         [ -d "${dir}" ] || mkdir -p "${dir}"
         [ -d "${dir}/HTML" ] || mkdir -p "${dir}/HTML"
         cd ${dir}/HTML
-        cat > ctrl.html <<EOF
+        cat > ctrl.html <<EOF1
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -1388,8 +1434,8 @@ function produce_ctrl_pages {
     <p>Just a demo.</p>
   </body>
 </html>
-EOF
-        cat > tunnel.html <<EOF
+EOF1
+        cat > tunnel.html <<EOF2
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -1401,6 +1447,6 @@ EOF
     <p>Just a demo.</p>
   </body>
 </html>
-EOF
+EOF2
     )
 }

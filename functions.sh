@@ -374,12 +374,12 @@ function set_firefox_support_krb5_auth {
         
         grep -v "user_pref(\"network.negotiate-auth.trusted-uris\"," "${file}" \
             | grep -v "user_pref(\"network.negotiate-auth.delegation-uris\"," \
-                > "${tempfile}"
+            > "${tempfile}"
         cat "${tempfile}" > "${file}"
         
         for str in trusted-uris delegation-uris;do
-          echo "user_pref(\"network.negotiate-auth.${str}\", \"${site:-https://}\");" \
-              >> "${file}"
+            echo "user_pref(\"network.negotiate-auth.${str}\", \"${site:-https://}\");" \
+                >> "${file}"
         done
         
         rm -f "${tempfile}"
@@ -433,8 +433,8 @@ function set_firefox {
         
         set_firefox_user_pref_in_mass 'false' ${firefox_prefs_boolean_false}
         set_firefox_user_pref_in_mass 'true' ${firefox_prefs_boolean_true}
-#        set_firefox_user_pref 'browser.sessionstore.max_tabs_undo' 10
-#        set_firefox_user_pref 'browser.sessionstore.max_windows_undo' 3
+        #        set_firefox_user_pref 'browser.sessionstore.max_tabs_undo' 10
+        #        set_firefox_user_pref 'browser.sessionstore.max_windows_undo' 3
         set_firefox_user_pref 'toolkit.storage.synchronous' 1
         set_firefox_user_pref 'browser.link.open_newwindow' 3
         set_firefox_user_pref 'dom.max_script_run_time' 60
@@ -486,7 +486,7 @@ function open_firefox_tab {
 function open_firefox {
     for p in "$@";do
         if is_firefox_open;then
-#            firefox "$p"
+            #            firefox "$p"
             open_firefox_tab "$p" 2>&1 > /dev/null
         else
             open_firefox_win "$p" 2>&1 > /dev/null
@@ -519,11 +519,11 @@ function is_firefox_open {
 }
 
 function is_firefox_close {
-   if is_firefox_open;then
-       false
-   else
-       true
-   fi
+    if is_firefox_open;then
+        false
+    else
+        true
+    fi
 }
 
 function close_firefox_win {
@@ -1027,9 +1027,9 @@ function get_localstorage_parameters_when_scheme_is_file {
 function get_localstorage_parameters_by_origin {
     (
         if [ $# -gt 1 ];then
-                host="$1"
-                scheme="$2"
-                port="$3"
+            host="$1"
+            scheme="$2"
+            port="$3"
         else
             origin_info=$(get_info_from_url "$1")
             scheme="$(echo ${origin_info} | cut -d ':' -f 1)"
@@ -1143,7 +1143,7 @@ function create_ticket {
 }
 EOF1
 
-            else
+        else
             cat <<EOF2 | jq -M -c '.'
 {
 "action": "insert_js_file",
@@ -1389,7 +1389,7 @@ function produce_ctrl_pages {
   </body>
 </html>
 EOF
-cat > tunnel.html <<EOF
+        cat > tunnel.html <<EOF
 <!DOCTYPE html>
 <html lang="en">
   <head>

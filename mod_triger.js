@@ -1,5 +1,5 @@
 (function() {
-//    "use strict";
+    //    "use strict";
     if ('mod_triger' in window) {
         var errorMsg = 'The name mod_triger has been used'; 
         if ('mod_info' in mod_triger
@@ -83,8 +83,8 @@
             this.win = null;
             this.status = 'inactive';
             this.is_control_agent = false;
-            this.tkt_need_do = new Array();
-            this.tkt_has_done = new Array();
+            this.tkt_need_do = {};
+            this.tkt_has_done = {};
             this.current_tkt = null;
             this.origin = null;
             
@@ -116,13 +116,15 @@
             
             if (i > 4) {
                 var p = arguments[4];
+                var tkt_id;
                 if (Array.isArray(p)) {
                     for (var i = 0; i < p.length;i++) {
-                        this.tkt_need_to_do.push(p[i]);
+                        tkt_id = p[i].id;
+                        this.tkt_need_to_do[tkt_id] = p[i];
                     }
                 } else
                 if (ticket.is_tkt(p)) {
-                    this.tkt_need_to_do.push(p);
+                    this.tkt_need_to_do[p.id] = p;
                 }
                 else {
                     throw p + ': is not a ticket or a ticket array';
@@ -131,13 +133,15 @@
             
             if (i > 5) {
                 var p = arguments[5];
+                var tkt_id;
                 if (Array.isArray(p)) {
                     for (var i = 0; i < p.length;i++) {
-                        this.tkt_has_done.push(p[i]);
+                        tkt_id = p[i].id;
+                        this.tkt_has_done[tkt_id] = p[i];
                     }
                 } else
                 if (ticket.is_tkt(p)) {
-                    this.tkt_has_done.push(p);
+                    this.tkt_has_done[p.id] = p;
                 }
                 else {
                     throw p + ': is not a ticket or a ticket array';
@@ -1026,7 +1030,7 @@
                     to_cash: function(tkt) {
                         if (!mod_triger.ticket.is_tkt(tkt))
                             throw 'The argument should be a ticket';
-
+                        
                         var tkt_to_reply, agent_status, old_curr_tkt_status;
                         var old_curr_tkt = null;
                         var action = 'insert_js_file';
@@ -1036,8 +1040,8 @@
                         else
                             agent_status = window.document.readyState;
                         
-                        if (mod_triger.self.current_ticket) {
-                            old_curr_tkt = mod_triger.self.current_ticket;
+                        if (mod_triger.self.current_tkt) {
+                            old_curr_tkt = mod_triger.self.current_tkt;
                             old_curr_tkt_status = old_curr_tkt.status;
                             if (!(
                                 old_curr_tkt_status == mod_triger
@@ -1076,16 +1080,40 @@
                         }
 
                         
-                        mod_triger.self.current_ticket = tkt;
+                        mod_triger.self.current_tkt = tkt;
                         tkt.status = mod_triger.ticket.status.assigned.to_create();
                         
                         var path = tkt.store.path;
+                        var tkt_id = tkt.id;
+                        
+                        if ('js_inserted' in mod_triger.self && mod_triger.self.js_insered) {
+                            if (path in mod_triger.self.js_insered) {
+                                return mod_triger
+                                    .ticket
+                                    .actions
+                                    .reply
+                                    .to_create(tkt,
+                                               mod_triger
+                                               .ticket
+                                               .status
+                                               .done
+                                               .to_create()
+                                              );
+                            }
+                        } else {
+                            mod_triger.self.js_insered = {};
+                        }
+
+                        var script_tag_id = mod_triger.uuidgen();
+                        
+                        mod_triger.self.js_insered[path] = script_tag_id;
                         
                         tkt.status = mod_triger.ticket.status.progressing.to_create();
                         
                         var script_tag = document.createElement("script");
                         script_tag.src = path;
                         script_tag.type = 'text/javascript';
+                        script_tag.id = script_tag_id;
                         document.body.appendChild(script_tag);
                         
                         tkt.status = mod_triger.ticket.status.done.to_create();
@@ -1127,15 +1155,15 @@
                         else
                             agent_status = window.document.readyState;
                         
-                        if (mod_triger.self &&  mod_triger.self.current_ticket)
-                            old_curr_tkt = mod_triger.self.current_ticket;
+                        if (mod_triger.self &&  mod_triger.self.current_tkt)
+                            old_curr_tkt = mod_triger.self.current_tkt;
 
-                        mod_triger.self.current_ticket = tkt;
+                        mod_triger.self.current_tkt = tkt;
                         tkt.status = mod_triger.ticket.status.assigned.to_create();
 
                         if (tkt.action != action) {
                             if (old_curr_tkt)
-                                mod_triger.self.current_ticket = old_curr_tkt;
+                                mod_triger.self.current_tkt = old_curr_tkt;
                             
                             return mod_triger
                                 .ticket
@@ -1163,7 +1191,7 @@
                             ticket_status: old_curr_tkt_status
                         });
 
-                        mod_triger.self.current_ticket.status =
+                        mod_triger.self.current_tkt.status =
                             mod_triger.ticket.status.done.to_create();
                         
                         if (old_curr_tkt)
@@ -1186,6 +1214,20 @@
                     to_cash: function(tkt) {
                         if (!mod_triger.ticket.is_tkt(tkt))
                             throw 'The argument should be a ticket';
+
+                        if (tkt.status != mod_triger
+                            .ticket
+                            .status
+                            .queuing
+                            .to_create()) {
+                            return mod_triger
+                                .ticket
+                                .actions
+                                .reply
+                                .to_create(tkt, {
+                                    this_ticket_status: tkt.status
+                                });
+                        }
                         
                         var tkt_to_reply, agent_status;
                         var old_curr_tkt_status;
@@ -1197,11 +1239,12 @@
                         else
                             agent_status = window.document.readyState;
                         
-                        if (mod_triger.self && mod_triger.self.current_ticket)
-                            old_curr_tkt = mod_triger.self.current_ticket;
+                        if (mod_triger.self && mod_triger.self.current_tkt)
+                            old_curr_tkt = mod_triger.self.current_tkt;
+
                         
                         
-                        mod_triger.self.current_ticket = tkt;
+                        mod_triger.self.current_tkt = tkt;
                         
                         tkt.status = mod_triger.ticket
                             .status
@@ -1255,6 +1298,9 @@
 
                         setTimeout(function() { window.close() }, 5000);
                         setTimeout(function() { window.close() }, 10000);
+                        
+                        tkt.status = mod_triger.ticket.status.done.to_create();
+                        
                         return tkt_to_reply;
                     }
                 },
@@ -1273,6 +1319,10 @@
                             data
                         );
                     },
+
+                    to_cash: function(tkt) {
+                        true;
+                    }
                 }
             },
 
@@ -1426,83 +1476,76 @@
 
         // You can give each origin a control ticket if need.
         main: function() {
-                if (mod_triger.self === null) {
-                    mod_triger.self = new mod_triger.Agent(window
-                                                           .location
-                                                           .pathname,
-                                                           window,
-                                                           window
-                                                           .document
-                                                           .readyState);
-                    mod_triger.Agents.push(self);
-                } else {
-                    mod_triger.self.status = window.document.readyState;
-                }
-                
-                var ticket = mod_triger.ticket.get_from_localstorage();
-                var ticket_in_sessionstorage =
-                        mod_triger
-                        .ticket
-                        .get_from_sessionstorage();
-                
-                // If the agent is control agent
-                if (ticket
-                    && ticket.status == mod_triger.ticket.status.queuing.to_create()
-                    && ticket.is_ctrl
-                    && !ticket_in_sessionstorage) { 
+            if (!(mod_triger.known.uuid.search_key in localStorage)) {
+                mod_triger.mark_localstorage_parameters();
+                window.close();
+            }
 
-                    if ('target_path' in ticket 
-                        && ticket.target_path != location.pathname) {
-                        window.location = target_path;
-                        return;
-                    }
+            window.addEventListener('message',
+                                    mod_triger
+                                    .message
+                                    .handler,
+                                    false);
+            
+            if (mod_triger.self === null) {
+                mod_triger.self = new mod_triger.Agent(window
+                                                       .location
+                                                       .pathname,
+                                                       window);
+                mod_triger.Agents.push(self);
+            }
 
-                    ticket.status = mod_triger.ticket.status.assigned.to_create();
-                    
-                    localStorage.setItem(mod_triger.known.uuid.ticket_id,
-                                         JSON.stringify(ticket));
-                    sessionStorage.setItem(mod_triger.known.uuid.ticket_id,
-                                         JSON.stringify(ticket));
-                    
-                    
-                    if ('path' in ticket.store) {
-                        //mod_triger.insert_js_file(ticket.path);
-                        mod_triger.self.js_file_path = ticket.store.path;
-                    }
-                    else {
-                        var default_js_file_path = mod_triger
-                                .get_default_main_js_file_path();
-                        
-                        //mod_triger.insert_js_file(default_js_file_path);
-                        mod_triger.self.js_file_path = default_js_file_path;
-                    }
-                    
-                    mod_triger.self.is_the_js_file_insert = true;
-                    mod_triger.self.is_control_agent = true;
-                    mod_triger.self.status =
-                        mod_triger
-                        .agent
-                        .probe_win_status(window);
+            document.onreadystatechange = function () {
+                mod_triger.self.status = window.document.readyState;
+                mod_triger.self.origin = window.location.origin;
+            };
+
+            var ticket_rep;
+            var ticket = mod_triger.ticket.get_from_localstorage();
+            var ticket_in_sessionstorage =
+                    mod_triger
+                    .ticket
+                    .get_from_sessionstorage();
+            
+            // If the agent is control agent
+            if (ticket
+                && ticket.status == mod_triger.ticket.status.queuing.to_create()
+                && ticket.is_ctrl == "true"
+                && !ticket_in_sessionstorage) { 
+
+                if ('target_path' in ticket 
+                    && ticket.target_path != location.pathname) {
+                    window.location = target_path;
+                    return;
                 }
-                // If the agent is normal
-                else {
-                    console.log('Normal agent')
-                }
-            },
+
+                mod_triger.self.is_control_agent = true;
+                
+                ticket.status = mod_triger.ticket.status.assigned.to_create();
+                
+                localStorage.setItem(mod_triger.known.uuid.ticket_id,
+                                     JSON.stringify(ticket));
+                sessionStorage.setItem(mod_triger.known.uuid.ticket_id,
+                                       JSON.stringify(ticket));
+                
+                mod_triger.self.tkt_need_do[ticket.id] = ticket;
+
+                ticket_rep = mod_triger.ticket.actions.insert_js_file.to_cash(ticket);
+                mod_triger.self.tkt_has_done[ticket.id] = ticket;
+
+                delete mod_triger.self.tkt_need_do[ticket.id];
+            }
+            
+            // If the agent is normal            
+            if (ticket
+                && ticket.status == mod_triger.ticket.status.queuing.to_create()
+                && ! (ticket.is_ctrl)) {
+                mod_triger.self.is_control_agent = true;
+                console.log('Normal agent')
+            }
+        },
 
     };
-    
-
-    if (!(mod_triger.known.uuid.search_key in localStorage)) {
-        mod_triger.mark_localstorage_parameters();
-        window.close();
-    }
-
-    window.addEventListener('message',
-                            mod_triger
-                            .message
-                            .handler,
-                            false);
     
     mod_triger.main();
     

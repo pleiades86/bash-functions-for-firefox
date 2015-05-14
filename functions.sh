@@ -1109,12 +1109,15 @@ function is_localstorage_parameters_ok {
 function create_ticket {
     (
         path="$1"
-        status="$2"
-        target_path="$3"
+        is_ctrl="$2"
+        status="$3"
+        target_path="$4"
         
         if [ "${path}"x = x ];then
             path="$(get_default_js_top_dir)main.js"
         fi
+
+        is_ctrl="${is_ctrl:-true}"
         
         status="${status:-queuing}"        
         
@@ -1128,6 +1131,7 @@ function create_ticket {
 "store": {
     "path": "${path}"
 },
+"is_ctrl": "${is_ctrl}",
 "id": "$(uuidgen -r)",
 "tm_utc": "${tm_utc}",
 "tm_local": "${tm_local}", 
@@ -1146,6 +1150,7 @@ EOF1
 "store": {
     "path": "${path}"
 },
+"is_ctrl": "${is_ctrl}",
 "id": "$(uuidgen -r)",
 "tm_utc": "${tm_utc}",
 "tm_local": "${tm_local}", 
@@ -1304,6 +1309,32 @@ function read_ticket_tm_local_for_url {
             key="$(get_ticket_id)"
             read_value_from_localstorage "${key}" "${scope}" "${secure}" "${owner}" \
                 | jq -M -r '.tm_local'
+        else
+            caller >&2
+            echo "None localstorage parameters found for ${url}" >&2
+            exit 1
+        fi
+    )
+}
+
+function read_ticket_is_ctrl_for_url {
+    (
+        url="$1"
+        
+        if [ "${url}"x = x ];then
+            caller >&2
+            echo "Function read_ticket_is_ctrl_for_url need at least an argument" >&2
+            exit 1
+        fi
+
+        if is_localstorage_parameters_ok "${url}";then
+            parameters="$(get_localstorage_parameters_by_origin ${url})"
+            scope="$(echo $parameters | cut -d '|' -f 1)"
+            secure="$(echo $parameters | cut -d '|' -f 2)"
+            owner="$(echo $parameters | cut -d '|' -f 3)"
+            key="$(get_ticket_id)"
+            read_value_from_localstorage "${key}" "${scope}" "${secure}" "${owner}" \
+                | jq -M -r '.is_ctrl'
         else
             caller >&2
             echo "None localstorage parameters found for ${url}" >&2

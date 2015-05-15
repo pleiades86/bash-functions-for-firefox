@@ -1,7 +1,7 @@
 # Requirements (package names on CentOS)
 #
 # perl perl-Config-IniFiles jq sqlite3 perl(DBI) perl(DBD::SQLite)
-# util-linux-ng gnutls-utils pwgen ed
+# util-linux-ng gnutls-utils pwgen ed libselinux-utils nc
 #
 # sqlite3 need more latest version or we cannot access the sqlites
 # owned by Firefox.
@@ -1360,7 +1360,7 @@ function setting_vnc_password {
 }
 
 # Functions of message bus
-function fire_msg_as_html {
+function fire_ticket {
     (
         msg="$1"
         mod_triger_js="$2"
@@ -1373,19 +1373,15 @@ function fire_msg_as_html {
             old_mod_triger_js="${mod_triger_js}"
             mod_triger_js=$(pwd)/mod_triger.js
             if [ ! -r "${mod_triger_js}" ];then
-                echo "File ${old_mod_triger_js} not found" 2>&1
-                echo "File ${mod_triger_js} not found" 2>&1
+                echo "The path to file mod_triger.js not found" 2>&1
                 exit 1
             fi
         fi
         port=${port:-8080}
         host="${host:-localhost}"
 
-        cat <<EOF | nc -C -l ${host} ${port} 2>&1 > /dev/null
-HTTP/1.1 200 OK$(echo -n -e '\r')
-Content-Type: text/html; charset=UTF-8
-Connection: close
-
+        res=$(mktemp)
+        cat > $res <<EOF1 
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -1402,51 +1398,18 @@ mod_triger.self.tkt_need_do[JSON.parse('${msg}').id] = JSON.parse('${msg}');
    </script>
   </body>
 </html>
-EOF
-    )
-}
-
-function produce_ctrl_pages {
-    (
-        path_to_mod_triger_js="$1"
-        dir="$2"
-        if [ "${path_to_mod_triger_js}"x = x ];then
-            caller >&2
-            echo "Function produce_ctl_page need konw where mod_triger.js file is" >&2
-            exit 1
-        fi
-        if [ "${dir}"x = x ];then
-            dir="$(pwd)"
-        fi
-        [ -d "${dir}" ] || mkdir -p "${dir}"
-        [ -d "${dir}/HTML" ] || mkdir -p "${dir}/HTML"
-        cd ${dir}/HTML
-        cat > ctrl.html <<EOF1
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>Automation</title>
-    <script defer src="${path_to_mod_triger_js}" type="text/javascript"></script>
-  </head>
-  <body>
-    <h3>Automation</h3>
-    <p>Just a demo.</p>
-  </body>
-</html>
 EOF1
-        cat > tunnel.html <<EOF2
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>Automation</title>
-  </head>
-  <body>
-    <h3>Tunnel for control page to communicate with the bash script</h3>
-    <p>Just a demo.</p>
-  </body>
-</html>
+        cat <<EOF2 | nc -w ${timeout} -C -l ${host} ${port} 2>&1 > /dev/null
+HTTP/1.1 200 OK$(echo -n -e '\r')
+Content-Type: text/html; charset=UTF-8
+Connection: close
+Cache-Control: no-cache
+Date: $(date --rfc-822)
+Conten-lenth: $(wc -c $res | cut -d ' ' -f 1)
+
+$(cat $res)
 EOF2
+
+        rm -f $res
     )
 }

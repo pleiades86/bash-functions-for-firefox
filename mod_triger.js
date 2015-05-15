@@ -30,7 +30,8 @@
                 msg: 'mod_triger message',
                 ticket: 'mod_triger ticket',
                 agent: 'mod_triger agent',
-                event: 'mod_triger_msg_urgent'
+                event: 'mod_triger_msg_urgent',
+                msg_transfer_station: 'Message Transfer Station'
             },
             uuid: {
                 mod_id: 'ce9e3143-abee-4356-b1a1-2e0f27d037a7',
@@ -39,7 +40,8 @@
                 msg_id: '5ef66e29-374e-4481-9a87-b42548e072c9',
                 agent_id: '37937b4c-ac16-4ac1-ae9b-2f44279c5646',
                 main_js_file_id: 'd1dd4608-9b65-4437-b9b1-0a67efe892d1',
-                our_js_dir: '5a4863c7-ca1a-41a2-8737-c502da05a8c3'
+                our_js_dir: '5a4863c7-ca1a-41a2-8737-c502da05a8c3',
+                msg_transfer_station: '8366e0c0-1e65-4aa5-8420-2ffa09081f67'
             }
         },
         
@@ -85,6 +87,7 @@
             this.is_control_agent = false;
             this.tkt_need_do = {};
             this.tkt_has_done = {};
+            this.name = window.name;
             this.current_tkt = null;
             this.origin = null;
             
@@ -1009,6 +1012,103 @@
         
         ticket: {
             actions: {
+                set_agent_id: {
+                    to_create: function() {
+                        var uuid = mod_triger.uuidgen();
+                        
+                        var action = 'set_agent_id';
+
+                        if (arguments.length > 0)
+                            uuid = arguments[0];
+                            
+                        return new mod_triger.Ticket(
+                            action,
+                            {
+                                uuid: uuid
+                            }
+                        );
+                    },
+                    
+                    to_cash: function(tkt) {
+                        if (!mod_triger.ticket.is_tkt(tkt))
+                            throw 'The argument should be a ticket';
+                        
+                        var tkt_to_reply, agent_status, old_curr_tkt_status;
+                        var old_curr_tkt = null;
+                        var action = 'set_agent_id';
+
+                        if (mod_triger.self && mod_triger.self.status)
+                            agent_status = mod_triger.self.status;
+                        else
+                            agent_status = window.document.readyState;
+
+                        if (mod_triger.self.current_tkt) {
+                            old_curr_tkt = mod_triger.self.current_tkt;
+                            old_curr_tkt_status = old_curr_tkt.status;
+                            if (!(
+                                old_curr_tkt_status == mod_triger
+                                    .ticket
+                                    .status.done
+                                    .to_create()
+                                    ||
+                                    old_curr_tkt_status == mod_triger
+                                    .ticket
+                                    .status
+                                    .now_no_tkt
+                                    .to_create()
+                            )) {
+                                tkt_to_reply = mod_triger.ticket.actions
+                                    .reply.to_create(tkt, {
+                                        agent_status: agent_status,
+                                        ticket_status: old_curr_tkt_status
+                                    });
+                                return tkt_to_reply;
+                            }
+                        }
+                        else {
+                            old_curr_tkt_status = mod_triger
+                                .ticket.status
+                                .now_no_tkt
+                                .to_create();
+                        }
+
+                        if (tkt.action != action) {
+                            tkt.status = mod_triger.ticket.status.failed.to_create();
+                            throw 'Found a tiket that requires "'
+                                + tkt.action
+                                + ', while we need a '
+                                + action
+                                + ' one';
+                        }
+
+
+                        var uuid = tkt.store.uuid;
+                        var tkt_id = tkt.id;
+                        
+                        mod_triger.self.current_tkt = tkt;
+                        tkt.status = mod_triger.ticket.status.assigned.to_create();
+
+                        if (!mod_triger.self)
+                            throw 'The current agent is not exists';
+
+                        mod_triger.self.id = uuid;
+                        localStorage.setItem('AgentID', uuid);
+                        tkt.status = mod_triger.ticket.status.done.to_create();
+                        
+                        return mod_triger
+                            .ticket
+                            .actions
+                            .reply
+                            .to_create(tkt,
+                                       mod_triger
+                                       .ticket
+                                       .status
+                                       .done
+                                       .to_create()
+                                      );
+                    }
+                },
+                
                 insert_js_file: {
                     // to_create(path) or to_create()
                     to_create: function() {                        
@@ -1492,9 +1592,12 @@
                                                        .location
                                                        .pathname,
                                                        window);
+                if (localStorage.getItem('AgentID')) {
+                    mod_triger.self.id = localStorage.getItem('AgentID');
+                }
                 mod_triger.Agents.push(self);
             }
-
+            
             document.onreadystatechange = function () {
                 mod_triger.self.status = window.document.readyState;
                 mod_triger.self.origin = window.location.origin;
@@ -1540,8 +1643,13 @@
             if (ticket
                 && ticket.status == mod_triger.ticket.status.queuing.to_create()
                 && ! (ticket.is_ctrl)) {
-                mod_triger.self.is_control_agent = true;
-                console.log('Normal agent')
+                if (mod_triger.self.id == mod_triger.known.uuid.msg_transfer_station) {
+                    mod_triger.self.name = mod_triger.known.name.msg_transfer_station;
+                }
+                else {
+                    mod_triger.self.is_control_agent = true;
+                    console.log('Normal agent')
+                }
             }
         },
 

@@ -189,6 +189,13 @@ function get_ticket_id {
     )
 }
 
+function get_agent_id_of_msg_transfer_station {
+    (
+        uuid='8366e0c0-1e65-4aa5-8420-2ffa09081f67'
+        echo "${uuid}"
+    )
+}
+
 function get_default_js_top_dir {
     (
         uuid='5a4863c7-ca1a-41a2-8737-c502da05a8c3'
@@ -1343,6 +1350,8 @@ function read_ticket_is_ctrl_for_url {
     )
 }
 
+# Thanks to KVM and Virtualbox, we easily get a exclusive machine.
+# Hence shall we remove the following function?
 # Firefox need an X window. We could try VNC server for it if need.
 function setting_vnc_password {
     (
@@ -1399,8 +1408,8 @@ mod_triger.self.tkt_need_do[JSON.parse('${msg}').id] = JSON.parse('${msg}');
   </body>
 </html>
 EOF1
-        cat <<EOF2 | nc -w ${timeout} -C -l ${host} ${port} 2>&1 > /dev/null
-HTTP/1.1 200 OK$(echo -n -e '\r')
+        cat <<EOF2 | nc -C -l ${host} ${port} 2>&1 > /dev/null
+HTTP/1.1 200 OK
 Content-Type: text/html; charset=UTF-8
 Connection: close
 Cache-Control: no-cache

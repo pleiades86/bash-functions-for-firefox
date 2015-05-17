@@ -207,6 +207,121 @@ function is_file_exists {
     [ -e "$1" ]
 }
 
+function is_ip_addr {
+    (
+        ip="${1:-127.0.0.1}"
+        if echo "${ip}" \
+            | grep -q -E \
+            '([0-9]{0,3}\.){3,3}[0-9]{0,3}';then
+            ip1=$(echo "${ip}" | cut -d '.' -f 1)
+            ip2=$(echo "${ip}" | cut -d '.' -f 2)
+            ip3=$(echo "${ip}" | cut -d '.' -f 3)
+            ip4=$(echo "${ip}" | cut -d '.' -f 4)
+            
+            if eval "[ ${ip1} -le 255 ] 2>&1 > /dev/null \
+                && [ ${ip2} -le 255 ] 2>&1 > /dev/null\
+                && [ ${ip3} -le 255 ] 2>&1 > /dev/null \
+                && [ ${ip4} -le 255 ] 2>&1 > /dev/null" 2>&1 > /dev/null;then
+                exit 0
+            else
+                exit 1
+            fi
+        else
+            exit 1
+        fi
+            
+    )
+}
+
+function convert_name_to_ip {
+    (
+        if [ $# -eq 0 ];then
+            echo "Need an DNS name" >&2
+            exit 1
+        fi
+
+        local_names_and_ips=$(expand /etc/hosts \
+            | grep -v -E '^#|^$' \
+            | tr -s ' ' | sed -e 's/ *$//')
+        
+        find=1
+        hosts=''
+        arguments=''
+        
+        for name in "$@";do
+            if is_ip_addr $name;then
+                hosts="${name} ${hosts}"
+            else
+                s=$(echo "${local_names_and_ips}" | grep -E "^${name} | ${name} | ${name}$")
+                if [ -n "${s}" ];then
+                    hosts="$(echo ${s} | cut -d ' ' -f 1 | xargs) ${hosts}"
+                else
+                    s=$(dig +short ${name} A | xargs)
+                    if [ -n "${s}" ];then
+                        arguments="${arguments} ${s}"
+                        find=0
+                    else
+                        hosts="${name} ${hosts}"
+                    fi
+                fi
+            fi
+        done
+
+        hosts=$(echo "${hosts}" | sed -e 's/^ \+//' -e 's/ \+$//' | tr -s ' ')
+
+
+        if [ ${find} -eq 0 ];then
+            hosts="${hosts} $(convert_name_to_ip ${arguments})"
+        fi
+        
+        for h in ${hosts};do echo $h;done | sort | uniq
+    )
+}
+
+function is_port_listened {
+    (
+        ret=1
+        if [ $# -gt 0 ];then
+            port="$1"
+            s=$(grep -v -E '^#|^$' /etc/services \
+                | expand \
+                | tr -s ' '  | grep -E "^${port} ")
+            if [ -n "${s}" ];then
+                port=$(echo "${s}" \
+                    | cut -d ' ' -f 2 | grep /tcp \
+                    | cut -d '/' -f 1 | sort | uniq)
+                if [ $(echo ${port} | wc -w) -gt 1 ];then
+                    echo "Seems we get two for ports" >&2
+                    exit 1
+                fi
+            fi
+            shift
+        else
+            port=8080
+        fi
+        
+        if [ $# -eq 0 ];then
+            exit $(fuser -s -n tcp ${port};echo $?)
+        else
+           hosts=$(convert_name_to_ip "$@")
+        fi
+
+        for h in ${hosts};do
+            is_ip_addr ${h} || exit 0
+        done
+        
+        hosts="${hosts} 0.0.0.0"
+        
+        s="$(netstat -ltn | expand | tr -s ' ' | sed -e 's/ *$//' | grep -E ' LISTEN$')"
+        for h in $hosts;do
+            if echo "${s}" | grep -q " ${h}:${port} ";then
+                exit 0
+            fi
+        done
+        exit ${ret}
+    )
+}
+
 # Functions to control /dev/tty.
 # If need we will give more functions.
 function is_tty {
@@ -407,6 +522,10 @@ function set_firefox_no_password_remember {
 
 function set_firefox {
     (
+        if is_firefox_open;then
+            echo 'Firefox is running' >&2
+            exit 1
+        fi
         firefox_prefs_boolean_false='
             security.csp.enable
             dom.disable_open_during_load
@@ -457,9 +576,56 @@ function set_firefox {
 
 # Functions to control firefox
 function init_firefox {
+    if is_firefox_open;then
+        echo 'Firefox is running' >&2
+        exit 1
+    fi
     delete_all_search_key
     delete_all_ticket
+    init_ticket_transfer_station "$@"
+    wait_three_minutes close_firefox_win
+    if is_firefox_open;then
+        echo 'Firefox is running' >&2
+        exit 1
+    fi
 }
+
+function init_ticket_transfer_station {
+    (
+        url="$1"
+        
+        if [ "${url}"x = x ];then
+            caller >&2
+            echo "Function read_ticket_is_ctrl_for_url need at least an argument" >&2
+            exit 1
+        fi
+
+        origin_info=$(get_info_from_url "${url}")
+        scheme="$(echo ${origin_info} | cut -d ':' -f 1)"
+        host="$(echo ${origin_info} | cut -d ':' -f 2)"
+        port="$(echo ${origin_info} | cut -d ':' -f 3)"
+        path="$(echo ${origin_info} | cut -d ':' -f 4)"
+
+        if [ "${scheme}" != "http" ] && [ "${scheme}" != "https" ];then
+            echo 'The ticket transfer station agent need http/https' >&2
+            exit 1
+        fi
+
+        if [ "${scheme}" = 'https' ];then
+            fire_ticket
+            add_cert_for_each_host_of ${url}
+        fi
+
+        fire_ticket
+        open_firefox "${url}"
+        if ! wait_three_minutes is_localstorage_parameters_ok ${url};then
+            echo 'Failed to get localstorage for ticket transfer station agent' >&2
+            echo "The agent: ${url}" >&2
+            exit 1
+        fi
+    )
+}
+
 function open_firefox_win {
     (
         uri="$1"
@@ -1115,61 +1281,41 @@ function is_localstorage_parameters_ok {
 
 function create_ticket {
     (
-        path="$1"
-        is_ctrl="$2"
-        status="$3"
-        target_path="$4"
+        action="$1"
+        store="$2"
+        target_path="$3"
+        is_ctrl="$4"
+        status="$5"
         
-        if [ "${path}"x = x ];then
-            path="$(get_default_js_top_dir)main.js"
+        [ "${action}"x = x ] && action='insert_js_file'
+        if [ "${action}" = "insert_js_file" ];then
+            [ "${store}"x = x ] && store="{\"path\": \"$(get_default_js_top_dir)main.js\"}"
+        else
+            [ "${store}"x = x ] && store='{}'
         fi
-
+        target_path="${target_path:-}"
         is_ctrl="${is_ctrl:-true}"
-        
-        status="${status:-queuing}"        
+        status="${status:-queuing}"
         
         tm_utc="$(date -u)"
         tm_local=$(date -d "${tm_utc}")
 
-        if [ "${target_path}"x = x ];then
-            cat <<EOF1 | jq -M -c '.'
+        cat <<EOF1 | jq -M -c '.'
 {
-"action": "insert_js_file",
-"store": {
-    "path": "${path}"
-},
+"action": "${action}",
+"store": ${store},
+"target_path": "${target_path}", 
 "is_ctrl": "${is_ctrl}",
+"status": "${status}",
 "id": "$(uuidgen -r)",
 "tm_utc": "${tm_utc}",
 "tm_local": "${tm_local}", 
-"status": "${status}",
 "wrapper": {
      "id": "$(get_ticket_id)",
      "name": "mod_triger ticket"  
 }
 }
 EOF1
-
-        else
-            cat <<EOF2 | jq -M -c '.'
-{
-"action": "insert_js_file",
-"store": {
-    "path": "${path}"
-},
-"is_ctrl": "${is_ctrl}",
-"id": "$(uuidgen -r)",
-"tm_utc": "${tm_utc}",
-"tm_local": "${tm_local}", 
-"status": "${status}",
-"target_path": "${target_path}",
-"wrapper": {
-     "id": "$(get_ticket_id)",
-     "name": "mod_triger ticket"  
-}
-}
-EOF2
-        fi        
     )
 }
 
@@ -1389,8 +1535,11 @@ function fire_ticket {
         port=${port:-8080}
         host="${host:-localhost}"
 
-        res=$(mktemp)
-        cat > $res <<EOF1 
+        d=$(mktemp -d)
+        httpd=${d}/httpd
+        headers=${d}/header
+        body=${d}/body
+        cat > ${body} <<EOF1
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -1408,17 +1557,28 @@ mod_triger.self.tkt_need_do[JSON.parse('${msg}').id] = JSON.parse('${msg}');
   </body>
 </html>
 EOF1
-        cat <<EOF2 | nc -C -l ${host} ${port} 2>&1 > /dev/null
+
+        body_size=$(wc -c ${body} | cut -d ' ' -f 1)
+        cat > ${headers} <<EOF2
 HTTP/1.1 200 OK
 Content-Type: text/html; charset=UTF-8
 Connection: close
 Cache-Control: no-cache
 Date: $(date --rfc-822)
-Conten-lenth: $(wc -c $res | cut -d ' ' -f 1)
+Conten-lenth: ${body_size}
 
-$(cat $res)
 EOF2
 
-        rm -f $res
+        cat > ${httpd} <<EOF3
+#!/bin/bash
+trap 'rm -rf $d' EXIT
+cat "${headers}" "${body}" \\
+  | nc -C -l ${host} ${port} 2>&1 > /dev/null
+
+EOF3
+
+        chmod u+x ${httpd}
+        cd ${d}
+        setsid ${httpd} &
     )
 }

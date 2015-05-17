@@ -1003,7 +1003,6 @@
             this.tm_local = dt.toString();
             this.status = mod_triger.ticket.status.queuing.to_create();
             this.id = mod_triger.uuidgen();
-            
             this.wrapper = {
                 id: mod_triger.known.uuid.ticket_id,
                 name: mod_triger.known.name.ticket
@@ -1616,7 +1615,8 @@
                 && ticket.is_ctrl == "true"
                 && !ticket_in_sessionstorage) { 
 
-                if ('target_path' in ticket 
+                if ('target_path' in ticket
+                    && ticket.target_path
                     && ticket.target_path != location.pathname) {
                     window.location = target_path;
                     return;

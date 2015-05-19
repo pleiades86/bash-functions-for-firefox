@@ -21,7 +21,7 @@ function wait_as_long_as_until {
         
         if [ ${time_out} -lt ${interval} ];then
             caller >&2
-            echo "In function wait_as_long_as_until time_out should be big than interval" >&2
+            echo "Time_out should be big than interval" >&2
             exit 1
         fi
 
@@ -229,7 +229,7 @@ function is_ip_addr {
         else
             exit 1
         fi
-            
+        
     )
 }
 
@@ -279,8 +279,7 @@ function convert_name_to_ip {
 }
 
 function is_port_listened {
-    (
-        ret=1
+    (   
         if [ $# -gt 0 ];then
             port="$1"
             s=$(grep -v -E '^#|^$' /etc/services \
@@ -301,9 +300,13 @@ function is_port_listened {
         fi
         
         if [ $# -eq 0 ];then
-            exit $(fuser -s -n tcp ${port};echo $?)
+            if fuser -s -n tcp ${port};then
+                exit 0
+            else
+                exit 1
+            fi
         else
-           hosts=$(convert_name_to_ip "$@")
+            hosts=$(convert_name_to_ip "$@")
         fi
 
         for h in ${hosts};do
@@ -313,12 +316,34 @@ function is_port_listened {
         hosts="${hosts} 0.0.0.0"
         
         s="$(netstat -ltn | expand | tr -s ' ' | sed -e 's/ *$//' | grep -E ' LISTEN$')"
+        
         for h in $hosts;do
             if echo "${s}" | grep -q " ${h}:${port} ";then
                 exit 0
             fi
         done
-        exit ${ret}
+        
+        exit 1
+    )
+}
+
+function get_an_idle_port {
+    (
+        first_min_idle_port=1023
+        first_max_idle_port=$(sysctl -q net.ipv4.ip_local_port_range | tr '\t' ' ' | cut -d ' ' -f 3)
+
+        second_min_idle_port=$(sysctl -q net.ipv4.ip_local_port_range | tr '\t' ' ' | cut -d ' ' -f 4)
+        second_max_idle_port=65535
+
+        port=$(expr ${RANDOM} + ${RANDOM})
+
+        if [ ${port} -lt ${first_max_idle_port} -a ${port} -gt ${first_min_idle_port} ]  \
+            || [ ${port} -lt ${second_max_idle_port} -a ${port} -gt ${second_min_idle_port} ];then
+            if ! is_port_listened ${port};then
+                echo ${port};return
+            fi
+        fi
+        get_an_idle_port
     )
 }
 
@@ -539,6 +564,7 @@ function set_firefox {
             update_notifications.enabled
             security.warn_entering_secure
             security.warn_entering_weak
+            security.fileuri.strict_origin_policy
             toolkit.telemetry.enabled
             datareporting.healthreport.service.enabled
             datareporting.healthreport.uploadEnabled
@@ -576,14 +602,21 @@ function set_firefox {
 
 # Functions to control firefox
 function init_firefox {
+    url="$1"
     if is_firefox_open;then
         echo 'Firefox is running' >&2
         exit 1
     fi
+    
     delete_all_search_key
     delete_all_ticket
-    init_ticket_transfer_station "$@"
+    
+    #    init_ticket_transfer_station "${url:-http://localhost:8080}" 
+
+    sleep 5
+    
     wait_three_minutes close_firefox_win
+
     if is_firefox_open;then
         echo 'Firefox is running' >&2
         exit 1
@@ -596,7 +629,7 @@ function init_ticket_transfer_station {
         
         if [ "${url}"x = x ];then
             caller >&2
-            echo "Function read_ticket_is_ctrl_for_url need at least an argument" >&2
+            echo "Function init_ticket_transfer_station need at least an argument" >&2
             exit 1
         fi
 
@@ -606,23 +639,21 @@ function init_ticket_transfer_station {
         port="$(echo ${origin_info} | cut -d ':' -f 3)"
         path="$(echo ${origin_info} | cut -d ':' -f 4)"
 
-        if [ "${scheme}" != "http" ] && [ "${scheme}" != "https" ];then
-            echo 'The ticket transfer station agent need http/https' >&2
+        if [ "${scheme}" != "http" ];then
+            echo 'The ticket transfer station agent need http protocol' >&2
             exit 1
-        fi
+        fi        
 
-        if [ "${scheme}" = 'https' ];then
-            fire_ticket
-            add_cert_for_each_host_of ${url}
-        fi
-
-        fire_ticket
-        open_firefox "${url}"
-        if ! wait_three_minutes is_localstorage_parameters_ok ${url};then
+        if is_port_listened "${port}" "${host}";then
             echo 'Failed to get localstorage for ticket transfer station agent' >&2
-            echo "The agent: ${url}" >&2
+            echo "The ${url} has been used" >&2
             exit 1
+        else
+            fire_ticket "" "" "${port}" "${host}"
+            open_firefox "${url}"
         fi
+
+        exit 0
     )
 }
 
@@ -659,7 +690,6 @@ function open_firefox_tab {
 function open_firefox {
     for p in "$@";do
         if is_firefox_open;then
-            #            firefox "$p"
             open_firefox_tab "$p" 2>&1 > /dev/null
         else
             open_firefox_win "$p" 2>&1 > /dev/null
@@ -1288,10 +1318,11 @@ function create_ticket {
         status="$5"
         
         [ "${action}"x = x ] && action='insert_js_file'
+        port=$(get_an_idle_port)
         if [ "${action}" = "insert_js_file" ];then
             [ "${store}"x = x ] && store="{\"path\": \"$(get_default_js_top_dir)main.js\"}"
         else
-            [ "${store}"x = x ] && store='{}'
+            [ "${store}"x = x ] && store="{}"
         fi
         target_path="${target_path:-}"
         is_ctrl="${is_ctrl:-true}"
@@ -1307,6 +1338,7 @@ function create_ticket {
 "target_path": "${target_path}", 
 "is_ctrl": "${is_ctrl}",
 "status": "${status}",
+"msg_transfer_station": "http://${host:-localhost}:${port}",
 "id": "$(uuidgen -r)",
 "tm_utc": "${tm_utc}",
 "tm_local": "${tm_local}", 
@@ -1317,6 +1349,25 @@ function create_ticket {
 }
 EOF1
     )
+}
+
+function create_ticket_to_insert_js_file {
+    (
+        status='queuing'
+        
+        [ -n "$1" ] && path="$1"
+        [ -n "$2" ] && status="$2"
+
+        if [ -n "${path}" ];then
+            create_ticket 'insert_js_file' "{\"path\": \"${path}\"}" "" "" "${status}" 
+        else
+            create_ticket 'insert_js_file' '' '' '' "${status}" 
+        fi
+    )
+}
+
+function create_ticket_to_set_self_as_transfer_station {
+    create_ticket 'set_agent_id' "{\"uuid\": \"$(get_agent_id_of_msg_transfer_station)\"}"
 }
 
 function is_status_of_ticket_of_url_not_queuing {
@@ -1345,7 +1396,7 @@ function write_ticket_for_url {
         path="$1"
         status="$2"
 
-        ticket="$(create_ticket ${path} ${status})"
+        ticket="$(create_ticket_to_insert_js_file ${path} ${status})"
 
         if is_localstorage_parameters_ok "${url}";then
 
@@ -1496,6 +1547,32 @@ function read_ticket_is_ctrl_for_url {
     )
 }
 
+function read_ticket_transfer_station_url_for_url {
+    (
+        url="$1"
+        
+        if [ "${url}"x = x ];then
+            caller >&2
+            echo "Function read_ticket_is_ctrl_for_url need at least an argument" >&2
+            exit 1
+        fi
+
+        if is_localstorage_parameters_ok "${url}";then
+            parameters="$(get_localstorage_parameters_by_origin ${url})"
+            scope="$(echo $parameters | cut -d '|' -f 1)"
+            secure="$(echo $parameters | cut -d '|' -f 2)"
+            owner="$(echo $parameters | cut -d '|' -f 3)"
+            key="$(get_ticket_id)"
+            read_value_from_localstorage "${key}" "${scope}" "${secure}" "${owner}" \
+                | jq -M -r '.transfer_station_url'
+        else
+            caller >&2
+            echo "None localstorage parameters found for ${url}" >&2
+            exit 1
+        fi
+    )
+}
+
 # Thanks to KVM and Virtualbox, we easily get a exclusive machine.
 # Hence shall we remove the following function?
 # Firefox need an X window. We could try VNC server for it if need.
@@ -1521,9 +1598,15 @@ function fire_ticket {
         mod_triger_js="$2"
         port="$3"
         host="$4"
+
+        if [ "${msg}"x = x ];then
+            msg=$(create_ticket_to_set_self_as_transfer_station)
+        fi
         
-        msg="${msg:-$(create_ticket)}"
-        mod_triger_js=$(o=$(pwd);cd $(dirname $0);echo $(pwd)/mod_triger.js;cd $o)
+        if [ "${mod_triger_js}"x = x ];then
+            mod_triger_js=$(o=$(pwd);cd $(dirname $0);echo $(pwd)/mod_triger.js;cd $o)
+        fi
+        
         if [ ! -r "${mod_triger_js}" ];then
             old_mod_triger_js="${mod_triger_js}"
             mod_triger_js=$(pwd)/mod_triger.js
@@ -1580,5 +1663,8 @@ EOF3
         chmod u+x ${httpd}
         cd ${d}
         setsid ${httpd} &
+
+        wait_thirty_seconds is_port_listened "${port}" "${host}"
     )
 }
+

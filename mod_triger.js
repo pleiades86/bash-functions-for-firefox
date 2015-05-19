@@ -1019,7 +1019,7 @@
 
                         if (arguments.length > 0)
                             uuid = arguments[0];
-                            
+                        
                         return new mod_triger.Ticket(
                             action,
                             {
@@ -1404,6 +1404,28 @@
                     }
                 },
 
+                my_status: {
+                    to_create: function(result) {
+                        var action = 'my_status';
+
+                        len = arguments.length;
+
+                        if (len == 0)
+                            result = {
+                                agent_status: mod_triger.self.status
+                            };
+                        
+                        return new mod_triger.Ticket(
+                            action,
+                            result
+                        );
+                    },
+                    
+                    to_cash: function(tkt) {
+                        true;
+                    }
+                },
+                
                 reply: {
                     to_create: function(req_tkt, result) {
                         var action = 'reply';
@@ -1411,7 +1433,7 @@
                         var data = {
                             reply_to_tkt: req_tkt_id,
                             data: result
-                        }
+                        };
 
                         return new mod_triger.Ticket(
                             action,
@@ -1477,7 +1499,7 @@
             },
             
             send_to_agent: function(ticket, agent, origin) {
-                mod_triger.message.types.normal.to_send(ticket, agent.win, agent.origin);
+                mod_triger.message.types.normal.to_send(ticket, agent.win, origin);
             },
             
             send_to_win: function(ticket, win, origin) {
@@ -1485,7 +1507,7 @@
             },
 
             send_to_agent_as_urgent: function(ticket, agent, origin) {
-                mod_triger.message.types.urgent.to_send(ticket, agent.win, agent.origin);
+                mod_triger.message.types.urgent.to_send(ticket, agent.win, origin);
             },
             
             send_to_win_as_urgent: function(ticket, win, origin) {
@@ -1538,7 +1560,10 @@
             document.body.appendChild(script_tag);
         },
 
-        mark_localstorage_parameters: function() {
+        mark_localstorage_parameters_if_need: function() {
+            if ((mod_triger.known.uuid.search_key in localStorage))
+                return;
+
             if (window.location.protocol == "file:") {
                 localStorage.setItem(mod_triger.known.uuid.search_key,
                                      window.location.pathname);
@@ -1546,14 +1571,13 @@
             else
                 localStorage.setItem(mod_triger.known.uuid.search_key,
                                      window.location.origin);
+            window.close();
         },
         
         declare_self_is_complete: function() {
-            var w = window.opener;
-            if (w)
+            if (window.opener) {
                 w.postMessage('complete', w.location.origin);
-            else
-                mod_triger.self.status = 'complete';
+            }
         },
 
         
@@ -1573,41 +1597,50 @@
             }
         },
 
-        // You can give each origin a control ticket if need.
-        main: function() {
-            if (!(mod_triger.known.uuid.search_key in localStorage)) {
-                mod_triger.mark_localstorage_parameters();
-                window.close();
+        init_self_if_need: function() {
+            if (mod_triger.self)
+                return;
+
+            var ticket_rep, ticket, ticket_in_sessionstorage;
+            
+            window.addEventListener(
+                'message', mod_triger.message.handler, false
+            );
+            
+            mod_triger.self = new mod_triger.Agent(
+                window.location.pathname,
+                window
+            );
+            
+            if (localStorage.getItem('AgentID')) {
+                mod_triger.self.id = localStorage.getItem('AgentID');
             }
 
-            window.addEventListener('message',
-                                    mod_triger
-                                    .message
-                                    .handler,
-                                    false);
+            mod_triger.Agents.push(self);
             
-            if (mod_triger.self === null) {
-                mod_triger.self = new mod_triger.Agent(window
-                                                       .location
-                                                       .pathname,
-                                                       window);
-                if (localStorage.getItem('AgentID')) {
-                    mod_triger.self.id = localStorage.getItem('AgentID');
-                }
-                mod_triger.Agents.push(self);
+            if (window.opener) {
+                parent = new mod_triger.Agent('', window);
+                mod_triger.Agents.push(parent);
             }
-            
+
             document.onreadystatechange = function () {
                 mod_triger.self.status = window.document.readyState;
                 mod_triger.self.origin = window.location.origin;
+
+                if (window.document.readyState == mod_triger.agent.status.complete.to_create()) {
+                    if (mod_triger.parent) {
+                        var tkt = mod_triger.ticket.action.my_status.to_create();
+                        mod_triger.ticket.send_to_agent(tkt, mod_triger.parent, '*');
+                    }
+                }
             };
 
-            var ticket_rep;
-            var ticket = mod_triger.ticket.get_from_localstorage();
-            var ticket_in_sessionstorage =
-                    mod_triger
-                    .ticket
-                    .get_from_sessionstorage();
+
+            ticket = mod_triger.ticket.get_from_localstorage();
+            ticket_in_sessionstorage =
+                mod_triger
+                .ticket
+                .get_from_sessionstorage();
             
             // If the agent is control agent
             if (ticket
@@ -1633,7 +1666,14 @@
                 
                 mod_triger.self.tkt_need_do[ticket.id] = ticket;
 
-                ticket_rep = mod_triger.ticket.actions.insert_js_file.to_cash(ticket);
+                if ('msg_transfer_station' in ticket) {
+                    mod_triger.msg_transfer_station = ticket.msg_transfer_station;
+                    localStorage.setItem(
+                        mod_triger.known.uuid.msg_transfer_station,
+                        JSON.stringify(ticket.msg_transfer_station));
+                }
+                
+                ticket_rep = mod_triger.ticket.actions[ticket.action].to_cash(ticket);
                 mod_triger.self.tkt_has_done[ticket.id] = ticket;
 
                 delete mod_triger.self.tkt_need_do[ticket.id];
@@ -1651,6 +1691,12 @@
                     console.log('Normal agent')
                 }
             }
+        },
+
+        // You can give each origin a control ticket if need.
+        main: function() {
+            mod_triger.mark_localstorage_parameters_if_need();
+            mod_triger.init_self_if_need();
         },
 
     };
